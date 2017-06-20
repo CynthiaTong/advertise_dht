@@ -8,6 +8,8 @@
 
   - Error when testing advertise.r2py (`advertise_annouce` in specific, the lookup function seems fine) 
   
+    Update: centralizedadvertise_v2.r2py works. 
+  
     Local error message: 
     
         Exception (with class '.AdvertiseError'): ['announce error (type: central): The connection was refused!'] 
