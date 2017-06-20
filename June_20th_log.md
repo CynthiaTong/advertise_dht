@@ -39,4 +39,9 @@
   5. Helper & Debug 
     
       print network info, node info, etc. 
+      
+ ## To-dos 
+ 
+  - Keep investigating dht and the kadnode repo 
+  - Start Step 1 (setting up the dht network) 
   
