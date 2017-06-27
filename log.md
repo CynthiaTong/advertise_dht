@@ -12,6 +12,8 @@
         'CodeUnsafeError('Code failed safety check! Error: (\'<class \\\'exception_hierarchy.CheckStrException\\\'> 
         ("Unsafe string \\\'decode\\\' in line 98, node attribute \\\'name\\\'",)\',)',)'
       
+    Update: fixed sshkey_paramiko. PR: https://github.com/SeattleTestbed/seattlelib_v2/pull/192
+    
  ## To-dos 
  
   - Finish K-Bucket implementation, including depth (shared_prefix) method 
