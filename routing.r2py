@@ -1,0 +1,82 @@
+dy_import_module_symbols("node.r2py")
+dy_import_module_symbols("time.r2py")
+dy_import_module_symbols("random.r2py")
+
+class Kbucket:
+    def __init__(self, min, max, ksize):
+        self.min = min
+        self.max = max
+        self.ksize = ksize
+        self.nodes = list()
+        self.replacements = list() #should be a stack (set)
+        self.update_last_changed()
+
+    def update_last_changed(self):
+        timeport = list(getresources()[0]["connport"])[0]
+        time_updatetime(timeport)
+        self.last_changed = time_gettime()
+
+    def in_range(self, node):
+        return self.min <= node.long_id <= self.max
+
+    def add_node(self, node):
+
+        if node in self.nodes:
+            # move existing node to tail
+            self.nodes.remove(node)
+            self.nodes.append(node)
+        elif len(self.nodes) < self.ksize:
+            self.nodes.append(node)
+        else:
+            if node not in self.replacements:
+                self.replacements.append(node)
+            return False
+
+        return True
+
+    def remove_node(self, node):
+        if node not in self.nodes:
+            return False
+
+        self.nodes.remove(node)
+        # try adding one node from the top of the replacement stack
+        if len(self.replacements) > 0:
+            replacement_node = self.replacements.pop()
+            self.nodes.append(replacement_node)
+
+        return True
+
+    def random_id(self):
+        return random_randint(self.min, self.max)
+
+    def split(self):
+        if self.min >= self.max:
+            log("Cannot split bucket: min >= max")
+            return
+
+        mid = (self.min + self.max) / 2
+        bucket_1 = Kbucket(self.min, mid, self.ksize)
+        bucket_2 = Kbucket(mid+1, self.max, self.ksize)
+
+        for n in self.nodes:
+            new_bucket = None
+            if n.long_id <= mid:
+                new_bucket = bucket_1
+            else:
+                new_bucket = bucket_2
+            # new_bucket = bucket_1 if n.long_id <= mid else bucket_2
+            new_bucket.add_node(n)
+
+        return bucket_1, bucket_2
+
+    def node_count(self):
+        return len(self.nodes)
+
+    def get_head(self):
+        return self.nodes[0]
+
+    def __str__(self):
+        output = ""
+        for n in self.nodes:
+            output += str(n) + "\n"
+        return output
