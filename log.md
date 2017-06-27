@@ -1,3 +1,7 @@
+## Questions 
+
+   - Read publickeys from local .publickey file with `sshkey_file_to_publickey(filename)` and `rsa_publickey_to_string(publickey)` ?
+
 ## Problems
 
   - Error dylinking sshkey.r2py 
