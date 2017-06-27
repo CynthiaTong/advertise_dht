@@ -4,6 +4,8 @@
 ### Resources 
 
 - projects 
+  
+  [kademlia by bmuller](https://github.com/bmuller/kademlia/tree/master/kademlia)
 
   [KadNode by mwarning](https://github.com/mwarning/KadNode)
 
@@ -18,3 +20,7 @@
   [BitTorrent DHT Protocol](http://www.bittorrent.org/beps/bep_0005.html)
 
   [Kademlia: A Design Specification](http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#key)
+  
+  [Kademlia: A Peer-to-peer Information System Based on the XOR Metric](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf)
+
+ 
