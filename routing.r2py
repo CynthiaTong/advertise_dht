@@ -1,82 +1,56 @@
-dy_import_module_symbols("node.r2py")
+dy_import_module_symbols("bucket.r2py")
 dy_import_module_symbols("time.r2py")
-dy_import_module_symbols("random.r2py")
 
-class Kbucket:
-    def __init__(self, min, max, ksize):
-        self.min = min
-        self.max = max
-        self.ksize = ksize
-        self.nodes = list()
-        self.replacements = list() #should be a stack (set)
-        self.update_last_changed()
+class RoutingTable:
 
-    def update_last_changed(self):
-        timeport = list(getresources()[0]["connport"])[0]
-        time_updatetime(timeport)
-        self.last_changed = time_gettime()
+	def __init__(self, sourceNode, ksize):
+		self.sourceNode = sourceNode
+		self.ksize = ksize 
+		self.initial_bucket()
+		self.bucket_count = 1 
 
-    def in_range(self, node):
-        return self.min <= node.long_id <= self.max
+	def initial_bucket(self):
+		self.buckets = [KBucket(0, 2**160, self.ksize)]
 
-    def add_node(self, node):
+	# find proper bucket for contact (id in bucket's range)
+	def find_bucket(self, node):
+		for b in self.buckets:
+			if b.in_range(node):
+				return self.buckets.index(b) 
 
-        if node in self.nodes:
-            # move existing node to tail
-            self.nodes.remove(node)
-            self.nodes.append(node)
-        elif len(self.nodes) < self.ksize:
-            self.nodes.append(node)
-        else:
-            if node not in self.replacements:
-                self.replacements.append(node)
-            return False
+		raise ValueError("Node ID not in range: 0 - 2**160")
 
-        return True
+	def split_bucket(self, index):
+		bucket_1, bucket_2 = self.buckets[index].split()
+		self.buckets[index] = bucket_1 
+		self.buckets.insert(index+1, bucket_2)
+		self.bucket_count += 1 
 
-    def remove_node(self, node):
-        if node not in self.nodes:
-            return False
+	def remove_contact(self, node):
+		index = self.find_bucket(node)
+		self.buckets[index].remove_node(node)
 
-        self.nodes.remove(node)
-        # try adding one node from the top of the replacement stack
-        if len(self.replacements) > 0:
-            replacement_node = self.replacements.pop()
-            self.nodes.append(replacement_node)
+	def add_contact(self, node):
+		index = self.find_bucket(node)
+		bucket = self.buckets[index]
 
-        return True
+		if bucket.add_node(node):
+			return  
 
-    def random_id(self):
-        return random_randint(self.min, self.max)
+		# if table's owner node is in the bucket, split 
+		if bucket.in_range(self.sourceNode):
+			self.split_bucket(index)
+			# try adding again 
+			self.add_contact(node)
+		#else: 
+			#PING? 
+			# alternatively, only remove contact when it's unresponsive to other RPCs 
 
-    def split(self):
-        if self.min >= self.max:
-            log("Cannot split bucket: min >= max")
-            return
+	# get buckets that haven't been queried in the last hour 
+	def get_unvisited_buckets(self):
+		return [b for b in self.buckets if get_time() - b.last_visited >= 3600]
 
-        mid = (self.min + self.max) / 2
-        bucket_1 = Kbucket(self.min, mid, self.ksize)
-        bucket_2 = Kbucket(mid+1, self.max, self.ksize)
-
-        for n in self.nodes:
-            new_bucket = None
-            if n.long_id <= mid:
-                new_bucket = bucket_1
-            else:
-                new_bucket = bucket_2
-            # new_bucket = bucket_1 if n.long_id <= mid else bucket_2
-            new_bucket.add_node(n)
-
-        return bucket_1, bucket_2
-
-    def node_count(self):
-        return len(self.nodes)
-
-    def get_head(self):
-        return self.nodes[0]
-
-    def __str__(self):
-        output = ""
-        for n in self.nodes:
-            output += str(n) + "\n"
-        return output
+def get_time():
+	timeport = list(getresources()[0]["connport"])[0]
+	time_updatetime(timeport)
+	return time_gettime()
