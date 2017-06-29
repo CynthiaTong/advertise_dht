@@ -16,7 +16,7 @@ class RoutingTable:
 	def find_bucket(self, node):
 		for b in self.buckets:
 			if b.in_range(node):
-				return self.buckets.index(b) 
+				return self.buckets.index(b)
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
