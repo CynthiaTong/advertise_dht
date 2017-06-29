@@ -6,6 +6,8 @@
    
 ## Problems
 
+   - KadNode routing tables keeps buckets in a sorted linked list, problem finding closest buckets? (should use actual Binary      Tree structure? 
+
 ## To-dos 
 
    - Implement node lookup 
