@@ -10,6 +10,8 @@
 
 ## To-dos 
 
+   - Implement node storage 
+
    - Implement node lookup 
  
    - Implement RPC class 
