@@ -1,0 +1,46 @@
+dy_import_module_symbols("node.r2py")
+dy_import_module_symbols("time.r2py")
+
+class Storage: 
+
+	def __init__(self, sourceNode, ttl=86410):
+		"""
+			Default storage expire time: 24h + 10s 
+		"""
+		self.sourceNode = sourceNode
+		self.ttl = ttl  
+		self.peers = dict()
+
+	def set(self, key, value):
+		if key in self.peers:
+			self.peers[key][0] = get_time()
+		else: 
+			self.peers[key] = (get_time(), value)		
+
+	def get(self, key):
+		if key in self.peers:
+			return self.peers[key][1]	
+		else:
+			return None 
+
+	def __iter__(self):
+		return iter(self.peers)
+
+	# should be called by the node frequently 
+	def expire_data(self):
+		for key in self.peers.keys():
+			if get_time() - self.peers[key][0] > self.ttl:
+				del self.peers[key]
+
+	def __str__(self):
+		output = "Storage: \n"
+		for p in self.peers:
+			age = get_time() - self.peers[p][0] 
+			output += p + " : " + self.peers[p][1] + "\t Age: " + str(age) + " secs\n"
+		return output 
+
+
+def get_time():
+	timeport = list(getresources()[0]["connport"])[0]
+	time_updatetime(timeport)
+	return time_gettime()
