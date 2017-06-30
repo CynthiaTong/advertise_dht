@@ -1,5 +1,6 @@
 dy_import_module_symbols("bucket.r2py")
 dy_import_module_symbols("time.r2py")
+dy_import_module_symbols("lookup_list.r2py")
 
 class RoutingTable:
 
@@ -7,35 +8,29 @@ class RoutingTable:
 		self.sourceNode = sourceNode
 		self.ksize = ksize 
 		self.initial_bucket()
-		self.bucket_count = 1 
 
 	def initial_bucket(self):
 		self.buckets = [KBucket(0, 2**160, self.ksize)]
-
-	# find proper bucket for contact (id in bucket's range)
-	def find_bucket(self, node):
-		for b in self.buckets:
-			if b.in_range(node):
-				return self.buckets.index(b)
-
-		raise ValueError("Node ID not in range: 0 - 2**160")
 
 	def split_bucket(self, index):
 		bucket_1, bucket_2 = self.buckets[index].split()
 		self.buckets[index] = bucket_1 
 		self.buckets.insert(index+1, bucket_2)
-		self.bucket_count += 1 
 
 	def remove_contact(self, node):
-		index = self.find_bucket(node)
+		index = self.find_bucket(node)[0]
 		self.buckets[index].remove_node(node)
 
 	def add_contact(self, node):
-		index = self.find_bucket(node)
+		# if the node ID is identical to our own ID 
+		if node.long_id == self.sourceNode.long_id:
+			return False 
+
+		index = self.find_bucket(node)[0]
 		bucket = self.buckets[index]
 
 		if bucket.add_node(node):
-			return  
+			return True 
 
 		# if table's owner node is in the bucket, split 
 		if bucket.in_range(self.sourceNode):
@@ -44,11 +39,56 @@ class RoutingTable:
 			self.add_contact(node)
 		#else: 
 			#PING? 
-			# alternatively, only remove contact when it's unresponsive to other RPCs 
+			# If no reply, remove from table 
 
 	# get buckets that haven't been queried in the last hour 
 	def get_unvisited_buckets(self):
 		return [b for b in self.buckets if get_time() - b.last_visited >= 3600]
+
+	# find proper bucket for contact (id in bucket's range)
+	# return index and the bucket itself 
+	def find_bucket(self, node):
+		for b in self.buckets:
+			if b.in_range(node):
+				return self.buckets.index(b), b
+
+		raise ValueError("Node ID not in range: 0 - 2**160")
+
+	def get_lookup_nodes(self, targetNode, search_size=None):
+		search_size = search_size or self.ksize
+		lookup_list = Lookup_List(targetNode, search_size)
+
+		current_index, current_bucket = self.find_bucket(targetNode)
+		self.add_to_lookup_list(current_bucket, lookup_list)
+
+		left_index = current_index - 1  
+		right_index = current_index + 1 
+		go_left = True 
+
+		# while lookup list is not full and there are still buckets we haven't been, 
+		# add from neighboring buckets in the order: left, right, left, etc 
+		while not lookup_list.is_full() and (left_index > 0 or right_index < len(self.buckets)):
+			if left_index >= 0 and go_left:
+				previous_bucket = self.buckets[left_index]
+				self.add_to_lookup_list(previous_bucket, lookup_list)
+				left_index -= 1 
+				go_left = False 
+
+			if current_index < len(self.buckets):
+				next_bucket = self.buckets[right_index]
+				self.add_to_lookup_list(next_bucket, lookup_list)
+				right_index += 1 
+				go_left = True 
+
+		# Note: closest in this list at head 
+		return lookup_list.list
+
+
+	def add_to_lookup_list(self, bucket, lookup_list):
+		nodes = bucket.get_nodes()
+		for n in nodes:
+			lookup_list.insert(n)
+
 
 def get_time():
 	timeport = list(getresources()[0]["connport"])[0]

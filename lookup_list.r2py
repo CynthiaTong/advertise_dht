@@ -41,3 +41,7 @@ class Lookup_List:
 
 	def get_all_ids(self):
 		return [n.long_id for n in self.list]
+
+	def is_full(self):
+		return len(self.list) >= self.capacity
+	

@@ -58,7 +58,7 @@ class KBucket:
 
 		mid = (self.min + self.max) / 2
 		bucket_1 = KBucket(self.min, mid, self.ksize)
-		bucket_2 = KBucket(mid+1, self.max, self.ksize)
+		bucket_2 = KBucket(mid, self.max, self.ksize)
 
 		for n in self.nodes:
 			new_bucket = None
@@ -71,15 +71,11 @@ class KBucket:
 
 		return bucket_1, bucket_2
 
-	# get alpha number of nodes (for lookups)
-	def get_n_nodes(self, n):
+	# get all nodes (for lookups)
+	def get_nodes(self):
 		# bucket is contacted for lookup, update last_visited  
 		self.update_last_visited()
-
-		if len(self.nodes) >= n:
-			return self.nodes[:n]
-		else:
-			return self.nodes
+		return self.nodes
 
 	def node_count(self):
 		return len(self.nodes)

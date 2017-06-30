@@ -1,11 +1,12 @@
-dy_import_module_symbols("sha.r2py")
+# dy_import_module_symbols("sha.r2py")
 dy_import_module_symbols("random.r2py")
 
 class Node:
 
   def __init__(self, id, ip=None, port=None):
-    self.id = sha_hexhash(str(id))
-    self.long_id = long(self.id, 16)
+    self.id = str(id)
+    self.char_id = [ord(c) for c in self.id]
+    self.long_id = _get_randomint(self.id, 20)
     self.ip = ip
     self.port = port
 
@@ -21,13 +22,14 @@ class Node:
   def __str__(self):
     return "%s %s:%s" % (self.long_id, self.ip, str(self.port))
 
-# long to bin string 
-def bin(a):
-  s=''
-  t={'0':'000','1':'001','2':'010','3':'011',
-  '4':'100','5':'101','6':'110','7':'111'}
+# Converts some number of random bytes into a number
+# Treats random data as an unsigned long.
+def _get_randomint(data, bytes):
+  # Store the number
+  num = 0L
+  offset = 0
+  for char in data:
+    num |= ord(char) << offset * 8
+    offset += 1
 
-  for c in oct(a)[1:-1]:
-    s+=t[c]
-  return s
-  
+  return num
