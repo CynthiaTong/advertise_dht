@@ -1,13 +1,13 @@
 dy_import_module_symbols("node.r2py")
-dy_import_module_symbols("time.r2py")
+dy_import_module_symbols("util.r2py")
 
 class Storage: 
 
-	def __init__(self, sourceNode, ttl=86410):
+	def __init__(self, long_id, ttl=86410):
 		"""
 			Default storage expire time: 24h + 10s 
 		"""
-		self.sourceNode = sourceNode
+		self.id = long_id
 		self.ttl = ttl  
 		self.peers = dict()
 
@@ -38,9 +38,3 @@ class Storage:
 			age = get_time() - self.peers[p][0] 
 			output += p + " : " + self.peers[p][1] + "\t Age: " + str(age) + " secs\n"
 		return output 
-
-
-def get_time():
-	timeport = list(getresources()[0]["connport"])[0]
-	time_updatetime(timeport)
-	return time_gettime()

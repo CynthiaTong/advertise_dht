@@ -2,8 +2,8 @@ dy_import_module_symbols("node.r2py")
 
 class Lookup_List:
 
-	def __init__(self, targetNode, capacity):
-		self.targetNode = targetNode
+	def __init__(self, target_id, capacity):
+		self.targetNode = Node(target_id)
 		self.capacity = capacity
 		self.list = list() # sorted: closest at head, furthest at tail 
 

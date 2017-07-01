@@ -1,0 +1,6 @@
+dy_import_module_symbols("time.r2py")
+
+def get_time():
+	timeport = list(getresources()[0]["connport"])[0]
+	time_updatetime(timeport)
+	return time_gettime()

@@ -1,11 +1,11 @@
 dy_import_module_symbols("bucket.r2py")
-dy_import_module_symbols("time.r2py")
 dy_import_module_symbols("lookup_list.r2py")
+dy_import_module_symbols("util.r2py")
 
 class RoutingTable:
 
-	def __init__(self, sourceNode, ksize):
-		self.sourceNode = sourceNode
+	def __init__(self, long_id, ksize):
+		self.id = long_id
 		self.ksize = ksize 
 		self.initial_bucket()
 
@@ -21,25 +21,44 @@ class RoutingTable:
 		index = self.find_bucket(node)[0]
 		self.buckets[index].remove_node(node)
 
-	def add_contact(self, node):
-		# if the node ID is identical to our own ID 
-		if node.long_id == self.sourceNode.long_id:
+	"""
+		not necessarily "new" contact 
+		message_type: 
+			0 for reply 
+			1 for query 
+	"""
+	def add_contact(self, node, message_type):
+
+		# never add if the node ID is identical to our own ID  
+		if node.long_id == self.id:
 			return False 
 
-		index = self.find_bucket(node)[0]
-		bucket = self.buckets[index]
+		index, bucket = self.find_bucket(node)
 
-		if bucket.add_node(node):
+		if bucket.add_node(node, message_type):
 			return True 
+	
+		# New node and bucket full 
+
+		# Remove a known bad node 
+		for n in bucket.nodes:
+			if n.bad_node():
+				log ("Node ", n.long_id, " gets removed.\n")
+				bucket.remove_node(n)
+				break 
 
 		# if table's owner node is in the bucket, split 
-		if bucket.in_range(self.sourceNode):
+		if bucket.in_range(self.id):
 			self.split_bucket(index)
 			# try adding again 
-			self.add_contact(node)
-		#else: 
-			#PING? 
-			# If no reply, remove from table 
+			self.add_contact(node, message_type)
+		else: 
+			# Ping least recent seen node 
+			log ("Node ", bucket.get_oldest().long_id, " gets pinged.\n")
+			bucket.get_oldest().pinged += 1  
+
+			# add to bucket's replacement list 
+			bucket.add_replacement(node)
 
 	# get buckets that haven't been queried in the last hour 
 	def get_unvisited_buckets(self):
@@ -54,6 +73,7 @@ class RoutingTable:
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
+	# Might just need to scan the whole routing table to find STRICTLY closest !!
 	def get_lookup_nodes(self, targetNode, search_size=None):
 		search_size = search_size or self.ksize
 		lookup_list = Lookup_List(targetNode, search_size)
@@ -88,9 +108,4 @@ class RoutingTable:
 		nodes = bucket.get_nodes()
 		for n in nodes:
 			lookup_list.insert(n)
-
-
-def get_time():
-	timeport = list(getresources()[0]["connport"])[0]
-	time_updatetime(timeport)
-	return time_gettime()
+			

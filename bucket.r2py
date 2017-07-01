@@ -1,6 +1,6 @@
 dy_import_module_symbols("node.r2py")
-dy_import_module_symbols("time.r2py")
 dy_import_module_symbols("random.r2py")
+dy_import_module_symbols("util.r2py")
 
 class KBucket:
 
@@ -16,28 +16,38 @@ class KBucket:
 		self.last_visited = get_time()
 
 	# min: inclusive, max: exclusive 
-	def in_range(self, node):
-		return self.min <= node.long_id < self.max
+	def in_range(self, *args):
+		arg = args[0]
+		if isinstance(arg, Node):
+			return self.min <= arg.long_id < self.max
+		elif isinstance(arg, (int, long)):
+			return self.min <= arg <= self.max 
 
-	def is_new_node(self, node):
-		return node not in self.nodes
-
-	def add_node(self, node):
-
+	def add_node(self, node, type=None):
 		if node in self.nodes:
 			# move existing node to tail
 			self.nodes.remove(node)
 			self.nodes.append(node)
 		elif len(self.nodes) < self.ksize:
 			self.nodes.append(node)
+		# New node and bucket full 
 		else:
-			# if the node exists in replacements, move it to tail (top)
-			if node in self.replacements:
-				self.replacements.remove(node)
-			self.replacements.append(node)
 			return False
 
+		# update node info 
+		if type:
+			node.last_queried = get_time()
+		else:
+			node.pinged = 0 
+			node.last_replied = get_time()
+
 		return True
+
+	def add_replacement(self, node):
+		# if the node exists in replacements, move it to tail (top)
+		if node in self.replacements:
+			self.replacements.remove(node)
+		self.replacements.append(node)
 
 	def remove_node(self, node):
 		if node not in self.nodes:
@@ -92,9 +102,3 @@ class KBucket:
 		for n in self.nodes:
 			output += str(n) + "\n"
 		return output
-
-
-def get_time():
-	timeport = list(getresources()[0]["connport"])[0]
-	time_updatetime(timeport)
-	return time_gettime()
