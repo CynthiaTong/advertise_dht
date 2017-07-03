@@ -2,7 +2,7 @@ dy_import_module_symbols("node.r2py")
 dy_import_module_symbols("random.r2py")
 dy_import_module_symbols("util.r2py")
 
-class KBucket:
+class Bucket:
 
 	def __init__(self, min, max, ksize):
 		self.min = min
@@ -23,7 +23,7 @@ class KBucket:
 		elif isinstance(arg, (int, long)):
 			return self.min <= arg <= self.max 
 
-	def add_node(self, node, type=None):
+	def add_node(self, node, message_type=None):
 		if node in self.nodes:
 			# move existing node to tail
 			self.nodes.remove(node)
@@ -34,22 +34,28 @@ class KBucket:
 		else:
 			return False
 
-		# update node info 
-		if type:
-			node.last_queried = get_time()
-		else:
-			node.pinged = 0 
-			node.last_replied = get_time()
-
+		self.update_time_info(node, message_type)
+		# log ("NEW NODE ", node.long_id, "  ", node.pinged, "  ", node.last_queried, "  ", node.last_replied ,"\n")
 		return True
 
-	def add_replacement(self, node):
+	def add_replacement(self, node, message_type):
 		# if the node exists in replacements, move it to tail (top)
 		if node in self.replacements:
 			self.replacements.remove(node)
 		self.replacements.append(node)
+		self.update_time_info(node, message_type)
+	
+	# update node's time info based on the message type (req or res)
+	def update_time_info(self, node, message_type):
+		if message_type:
+			node.last_queried = get_time()
+		else:
+			node.pinged = 0 
+			node.replied = True 
+			node.last_replied = get_time()
 
 	def remove_node(self, node):
+
 		if node not in self.nodes:
 			return False
 
@@ -67,8 +73,8 @@ class KBucket:
 			return
 
 		mid = (self.min + self.max) / 2
-		bucket_1 = KBucket(self.min, mid, self.ksize)
-		bucket_2 = KBucket(mid, self.max, self.ksize)
+		bucket_1 = Bucket(self.min, mid, self.ksize)
+		bucket_2 = Bucket(mid, self.max, self.ksize)
 
 		for n in self.nodes:
 			new_bucket = None

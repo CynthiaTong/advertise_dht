@@ -10,16 +10,20 @@ class RoutingTable:
 		self.initial_bucket()
 
 	def initial_bucket(self):
-		self.buckets = [KBucket(0, 2**160, self.ksize)]
+		self.buckets = [Bucket(0, 2**160, self.ksize)]
 
 	def split_bucket(self, index):
 		bucket_1, bucket_2 = self.buckets[index].split()
 		self.buckets[index] = bucket_1 
 		self.buckets.insert(index+1, bucket_2)
 
-	def remove_contact(self, node):
-		index = self.find_bucket(node)[0]
-		self.buckets[index].remove_node(node)
+	"""
+		Instead, have a purge bad nodes function 
+	"""
+	# def remove_contact(self, node):
+	# 	index = self.find_bucket(node)[0]
+	# 	self.buckets[index].remove_node(node)
+
 
 	"""
 		not necessarily "new" contact 
@@ -42,9 +46,11 @@ class RoutingTable:
 
 		# Remove a known bad node 
 		for n in bucket.nodes:
-			if n.bad_node():
-				log ("Node ", n.long_id, " gets removed.\n")
-				bucket.remove_node(n)
+			if not n.good_node():
+				removed = bucket.remove_node(n)
+				if removed:
+					log ("Node ", n.long_id, " gets removed. ", 
+							n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
 				break 
 
 		# if table's owner node is in the bucket, split 
@@ -56,11 +62,12 @@ class RoutingTable:
 			# Ping least recent seen node 
 			log ("Node ", bucket.get_oldest().long_id, " gets pinged.\n")
 			bucket.get_oldest().pinged += 1  
+			# ADD PING!! 
 
 			# add to bucket's replacement list 
-			bucket.add_replacement(node)
+			bucket.add_replacement(node, message_type)
 
-	# get buckets that haven't been queried in the last hour 
+	# get buckets that haven't been queried in the last hour (to refresh)
 	def get_unvisited_buckets(self):
 		return [b for b in self.buckets if get_time() - b.last_visited >= 3600]
 
@@ -73,12 +80,23 @@ class RoutingTable:
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
-	# Might just need to scan the whole routing table to find STRICTLY closest !!
-	def get_lookup_nodes(self, targetNode, search_size=None):
+	# Get the strictly closest nodes to a given target ID 
+	def get_closest_nodes(self, target_id, search_size=None):
 		search_size = search_size or self.ksize
-		lookup_list = Lookup_List(targetNode, search_size)
+		lookup_list = Lookup_List(target_id, search_size)
+		# linear scan through the routing table, and add to lookup list 
+		for b in self.buckets:
+			self.add_to_lookup_list(b, lookup_list)
+		# Note: closest in this list at head 
+		return lookup_list.list
 
-		current_index, current_bucket = self.find_bucket(targetNode)
+	# Might just need to scan the whole routing table to find STRICTLY closest 
+	# (above get_closest_nodes function)
+	def get_lookup_nodes(self, target_id, search_size=None):
+		search_size = search_size or self.ksize
+		lookup_list = Lookup_List(target_id, search_size)
+
+		current_index, current_bucket = self.find_bucket(Node(target_id))
 		self.add_to_lookup_list(current_bucket, lookup_list)
 
 		left_index = current_index - 1  
@@ -108,4 +126,3 @@ class RoutingTable:
 		nodes = bucket.get_nodes()
 		for n in nodes:
 			lookup_list.insert(n)
-			

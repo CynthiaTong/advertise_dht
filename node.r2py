@@ -8,6 +8,7 @@ class Node:
     self.long_id = _get_randomint(self.id, 20)
     self.ip = ip
     self.port = port
+    self.replied = False 
     self.last_replied = 0 
     self.last_queried = 0 
     self.pinged = 0 
@@ -18,11 +19,14 @@ class Node:
   def compare_distance(self, node_1, node_2):
     return self.distance_to(node_1) - self.distance_to(node_2)
 
-  # our defination of a bad node 
-  def bad_node(self):
-    return (self.pinged > 2 and    
-            (self.last_replied < get_time() - 7200 or 
-            self.last_queried < get_time() - 900))
+  # bit torrent defination of a good node 
+  # pinged less than 3 times 
+  # replied in the last 15 minutes 
+  # ever replied, and queried in the last 15 minutes 
+  def good_node(self):
+    return (self.pinged < 3 and       
+            (self.last_replied > get_time() - 60*15 or   
+            (self.replied and self.last_queried > get_time() - 60*15)))
 
   def __repr__(self):
     return repr([self.long_id, self.ip, self.port])
