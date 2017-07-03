@@ -1,26 +1,28 @@
+## Questions 
+      
+   - Bitwise operations to split buckets? 
+     
+     UPDATE: The [Bittorent DHT Protocol](http://www.bittorrent.org/beps/bep_0005.html) acknowledges splitting by integer          range, though this is different from the Kademlia paper spec. 
+   
+   - Having "bad node" criteria as Bittorent protocol requires? (jech's dht also does this, but with different time interval  requirements) 
+   
+## Problems
 
-## Implement distributed `advertise` methods for Seattle RepyV2 
+   - KadNode routing tables keeps buckets in a sorted linked list, problem finding closest buckets? (should use actual Binary      Tree structure? 
+     
+     UPDATE: The simplest way to find _strictly_ closest nodes is to scan the whole routing table - yet this is unspecified in      the Kademlia paper. Actual implementation will need to depend on the system itself; if a node only stores a couple dozen      contacts, linear scanning is good enough and optimizes the search. Otherwise, the finding-k-closest algorithm seems            pretty involved. 
+     ([stackoverflow question](https://stackoverflow.com/questions/30654398/implementing-find-node-on-torrent-kademlia-routing-table)           about this). 
+     
+   
+   - Internal Error while executing routing.r2py: 
+   
+      ```
+      Exception (with class 'socket.error'): [Errno 1] Operation not permitted
+      ```
 
-### Resources 
+## To-dos 
 
-- projects 
-  
-  [kademlia by bmuller](https://github.com/bmuller/kademlia/tree/master/kademlia)
-
-  [KadNode by mwarning](https://github.com/mwarning/KadNode)
-
-  [dht by jech](https://github.com/jech/dht)
-  
-  [dns-via-dht by maboiteaspam](https://github.com/maboiteaspam/dns-via-dht)
-  
-  [bittorrent-dht by webtorrent](https://github.com/webtorrent/bittorrent-dht)
-
-- readings 
-
-  [BitTorrent DHT Protocol](http://www.bittorrent.org/beps/bep_0005.html)
-
-  [Kademlia: A Design Specification](http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#key)
-  
-  [Kademlia: A Peer-to-peer Information System Based on the XOR Metric](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf)
-
+   - Implement node lookup 
  
+   - Implement RPC class 
+  
