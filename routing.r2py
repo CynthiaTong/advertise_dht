@@ -80,13 +80,14 @@ class RoutingTable:
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
-	# Get the strictly closest nodes to a given target ID 
-	def get_closest_nodes(self, target_id, search_size=None):
+	# Get the strictly closest good nodes to a given target ID 
+	def get_closest_good_nodes(self, target_id, search_size=None):
 		search_size = search_size or self.ksize
 		lookup_list = Lookup_List(target_id, search_size)
 		# linear scan through the routing table, and add to lookup list 
 		for b in self.buckets:
-			self.add_to_lookup_list(b, lookup_list)
+			if b.good_node():
+				self.add_to_lookup_list(b, lookup_list)
 		# Note: closest in this list at head 
 		return lookup_list.list
 
