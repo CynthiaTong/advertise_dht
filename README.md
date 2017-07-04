@@ -1,10 +1,13 @@
 ## Questions 
-      
+
+   - anyway to use either `bytearray` or `struct` in repy? Need them to build RPC messages 
+       
    - Bitwise operations to split buckets? 
      
      UPDATE: The [Bittorent DHT Protocol](http://www.bittorrent.org/beps/bep_0005.html) acknowledges splitting by integer          range, though this is different from the Kademlia paper spec. 
    
-   - Having "bad node" criteria as Bittorent protocol requires? (jech's dht also does this, but with different time interval  requirements) 
+   - ~~Having "bad node" criteria as Bittorent protocol requires? (jech's dht also does this, but with different time interval  requirements)~~
+   
    
 ## Problems
 
