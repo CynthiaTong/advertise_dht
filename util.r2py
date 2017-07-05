@@ -1,4 +1,6 @@
 dy_import_module_symbols("time.r2py")
+dy_import_module_symbols("sha.r2py")
+dy_import_module_symbols("random.r2py")
 
 def get_time():
 	timeport = list(getresources()[0]["connport"])[0]
@@ -28,3 +30,30 @@ def tid_match(tid, prefix):
 		return tid[2]
 	else:
 		return -1 
+
+ROTATE_SECRET_INTERVAL = 5 * 60
+TOKEN_SIZE = 8
+SECRET_SIZE = 8
+
+# tokens are rotated every 5 min; tokens up to 10 min old are accepted 
+def rotate_secret(secret=None):
+	old_secret = None 
+	if secret:
+		old_secret = str(secret)
+
+	secret = random_randombytes(SECRET_SIZE)
+	rotate_secret_time = get_time() + ROTATE_SECRET_INTERVAL 
+
+	return (old_secret, secret, rotate_secret_time)
+
+def make_token(ip, secret):
+	return sha_hash(str(ip) + secret)
+
+def token_match(token, ip, old_secret, secret):
+	if old_secret:
+		old_hash = sha_hash(str(ip) + old_secret)
+		if old_hash == token: return True 
+	now_hash = sha_hash(str(ip) + secret)
+	if now_hash == token: return True 
+
+	return False 
