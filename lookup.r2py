@@ -1,41 +1,45 @@
 dy_import_module_symbols("node.r2py")
 
-class Lookup_List:
+class Lookup:
 
-	def __init__(self, target_id, capacity):
+	def __init__(self, target_id, tid, capacity):
 		self.targetNode = Node(target_id)
 		self.capacity = capacity
+		self.tid = tid 
+		self.step_time = 0 
+		self.done = 0 
 		self.list = list() # sorted: closest at head, furthest at tail 
+		self.numnodes = len(self.list)
 
 	# Insert into the lookup list: 
 	# if new contact's dist to target is less than the furthest in the list, 
 	# insert it and discard the old furthest if necessary (exceed capacity). 
 	# Otherwise, if the contact already exist or is further than the furthest, discard it. 
-	def insert(self, node):
+	def insert(self, lookup_node):
 
 		if len(self.list) == 0:
-			self.list.append(node)
+			self.list.append(lookup_node)
 			return 
 
 		for i in range(len(self.list)):
 			n = self.list[i]
-			comparison = self.targetNode.compare_distance(node, n)
+			comparison = self.targetNode.compare_distance(lookup_node, n)
 			if comparison == 0:
 				return 
 			elif comparison > 0:
 				continue 
 			else: # node is closer  
-				self.list.insert(i, node)
+				self.list.insert(i, lookup_node)
 				if len(self.list) > self.capacity:
 					self.list.pop()
 				return 
 		# if there's room in capacity after looping through self.list, just append new node 
 		if len(self.list) < self.capacity:
-			self.list.append(node)
+			self.list.append(lookup_node)
 
-	def remove(self, node):
-		if node in self.list:
-			self.list.remove(node)
+	def remove(self, lookup_node):
+		if lookup_node in self.list:
+			self.list.remove(lookup_node)
 			return True 
 		return False 
 
@@ -44,4 +48,11 @@ class Lookup_List:
 
 	def is_full(self):
 		return len(self.list) >= self.capacity
-	
+
+class Lookup_Node(Node):
+	def __init__(self, id, ip, port, token, replied):
+		Node.__init__(self, id, ip, port)
+		self.replied = replied 
+		self.token = token 
+		self.last_req = 0 
+		self.acked = 0 

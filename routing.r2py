@@ -1,12 +1,14 @@
 dy_import_module_symbols("bucket.r2py")
-dy_import_module_symbols("lookup_list.r2py")
+dy_import_module_symbols("lookup.r2py")
 dy_import_module_symbols("util.r2py")
+dy_import_module_symbols("random.r2py")
 
 class RoutingTable:
 
 	def __init__(self, long_id, ksize):
 		self.id = long_id
 		self.ksize = ksize 
+		self.expire_buckets_time = 0  
 		self.initial_bucket()
 
 	def initial_bucket(self):
@@ -23,6 +25,18 @@ class RoutingTable:
 	# def remove_contact(self, node):
 	# 	index = self.find_bucket(node)[0]
 	# 	self.buckets[index].remove_node(node)
+
+	# purge all bad nodes with pinged value >= 4 
+	def purge_bad_nodes(self):
+		changed = False 
+		for b in self.buckets:
+			for n in b.nodes:
+				if n.pinged >= 4:
+					b.remove_node(n)
+					changed = True
+
+		if changed:
+			self.expire_buckets_time = get_time() + 120 + random_int_below(240)
 
 
 	"""
@@ -81,24 +95,25 @@ class RoutingTable:
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
 	# Get the strictly closest good nodes to a given target ID 
-	def get_closest_good_nodes(self, target_id, search_size=None):
+	def get_closest_good_nodes(self, target_id, tid, search_size=None):
 		search_size = search_size or self.ksize
-		lookup_list = Lookup_List(target_id, search_size)
+		lookup = Lookup(target_id, tid, search_size)
 		# linear scan through the routing table, and add to lookup list 
 		for b in self.buckets:
-			if b.good_node():
-				self.add_to_lookup_list(b, lookup_list)
+			for n in b.get_nodes():
+				if n.good_node():
+					lookup.insert(n)
 		# Note: closest in this list at head 
-		return lookup_list.list
+		return lookup
 
 	# Might just need to scan the whole routing table to find STRICTLY closest 
 	# (above get_closest_nodes function)
-	def get_lookup_nodes(self, target_id, search_size=None):
+	def get_lookup_nodes(self, target_id, tid, search_size=None):
 		search_size = search_size or self.ksize
-		lookup_list = Lookup_List(target_id, search_size)
+		lookup = Lookup(target_id, tid, search_size)
 
 		current_index, current_bucket = self.find_bucket(Node(target_id))
-		self.add_to_lookup_list(current_bucket, lookup_list)
+		self.add_to_lookup(current_bucket, lookup)
 
 		left_index = current_index - 1  
 		right_index = current_index + 1 
@@ -106,24 +121,24 @@ class RoutingTable:
 
 		# while lookup list is not full and there are still buckets we haven't been, 
 		# add from neighboring buckets in the order: left, right, left, etc 
-		while not lookup_list.is_full() and (left_index > 0 or right_index < len(self.buckets)):
+		while not lookup.is_full() and (left_index > 0 or right_index < len(self.buckets)):
 			if left_index >= 0 and go_left:
 				previous_bucket = self.buckets[left_index]
-				self.add_to_lookup_list(previous_bucket, lookup_list)
+				self.add_to_lookup(previous_bucket, lookup)
 				left_index -= 1 
 				go_left = False 
 
 			if current_index < len(self.buckets):
 				next_bucket = self.buckets[right_index]
-				self.add_to_lookup_list(next_bucket, lookup_list)
+				self.add_to_lookup(next_bucket, lookup)
 				right_index += 1 
 				go_left = True 
 
 		# Note: closest in this list at head 
-		return lookup_list.list
+		return lookup
 
-
-	def add_to_lookup_list(self, bucket, lookup_list):
+	def add_to_lookup(self, bucket, lookup):
 		nodes = bucket.get_nodes()
 		for n in nodes:
-			lookup_list.insert(n)
+			lookup.insert(n)
+	
