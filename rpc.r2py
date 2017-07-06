@@ -25,13 +25,13 @@ class RPC:
 			if target_id == l.target_id:
 				l.done = 0 
 				new_lookup = False 
-				for n in l.list:
-					# discard doubtful node 
+				for n in l.get_nodes():
+					# discard dubious node 
 					if n.pinged >= 3 or n.last_replied < get_time() - 120 * 60:
 						l.remove(n)
 				# get some new lookup nodes 
 				l = self.router.get_lookup_nodes(l, target_id)
-				# self.lookup_step()
+				self.lookup_step(l, callback)
 				break 
 
 		if new_lookup:
@@ -51,9 +51,73 @@ class RPC:
 
 			newest = self.router.get_lookup_nodes(newest, target_id)
 			newest.port = port 
-			# self.lookup_step()
+			self.lookup_step(newest, callback)
 
 			# log (newest.get_all_ids(), "\n")
 
 		# update lookup_time 
 		self.lookup_time = get_time()
+
+	def lookup_step(self, lookup, callback):
+		live_node_count = 0 
+		all_replied = True 
+		finished = False 
+		# see if we have got reply from k (8) live nodes 
+		for n in lookup.get_nodes():
+			if n.pinged >= 3: 
+				continue 		
+			if live_node_count >= 8:
+				break 
+			if not n.replied:
+				all_replied = False 
+				break 
+			live_node_count += 1 
+
+		# if we have k live nodes 
+		if all_replied:
+			# finished for pure lookup 
+			if lookup.port == 0:
+				finished = True 
+			else: 
+				all_acked = True 
+				count = 0 
+				for n in lookup.get_nodes():
+					if n.pinged >= 3:
+						continue 
+					if n.token == None: # ?? 
+						n.acked = 1 
+					if not n.acked:
+						all_acked = False 
+						log ("Sending announce peer. \n")
+						tid = make_tid("ap", lookup.tid)
+						# announce_peer()
+						n.pinged += 1 
+						n.last_req = get_time()
+						# find node with this id in routing table 
+						node = self.router.find_node(n.long_id)
+						if node:
+							node.pinged += 1 
+							# if node.pinged >= 3: send_cashed_ping? 
+				if all_acked:
+					finished = True 
+			lookup.step_time = get_time()
+			return 
+
+		# if not all replied 
+
+		if lookup.step_time > get_time() - 15:
+			return 
+
+		send_count = 0 
+		for n in lookup.get_nodes():
+			send_count += self.search_get_peers(lookup, n)
+			if send_count >= 3:
+				break 
+
+		lookup.step_time = get_time()
+		return 
+
+		if finished:
+			lookup.done = 1 
+			lookup.step_time = get_time()
+			# callback 
