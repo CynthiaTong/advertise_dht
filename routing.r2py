@@ -108,10 +108,8 @@ class RoutingTable:
 
 	# Might just need to scan the whole routing table to find STRICTLY closest 
 	# (above get_closest_nodes function)
-	def get_lookup_nodes(self, target_id, tid, search_size=None):
-		search_size = search_size or self.ksize
-		lookup = Lookup(target_id, tid, search_size)
-
+	def get_lookup_nodes(self, lookup, target_id):
+		# find the bucket and add its nodes 
 		current_index, current_bucket = self.find_bucket(Node(target_id))
 		self.add_to_lookup(current_bucket, lookup)
 
@@ -141,4 +139,3 @@ class RoutingTable:
 		nodes = bucket.get_nodes()
 		for n in nodes:
 			lookup.insert(n)
-	

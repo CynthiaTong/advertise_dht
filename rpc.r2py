@@ -1,0 +1,59 @@
+dy_import_module_symbols("lookup.r2py")
+dy_import_module_symbols("routing.r2py")
+dy_import_module_symbols("storage.r2py")
+dy_import_module_symbols("util.r2py")
+
+SEARCH_CAPACITY = 14 
+DHT_SEARCH_EXPIRE_TIME = 62 * 60
+DHT_MAX_SERACHES = 1024 # why?
+
+class RPC:
+
+	def __init__(self, long_id, routing_table, storage):
+		self.id = long_id 
+		self.storage = storage 
+		self.router = routing_table
+		self.lookups = list()
+		self.lookup_id = make_lid()
+		self.lookup_time = 0 
+
+	def dht_lookup(self, target_id, port, callback):
+		new_lookup = True 
+
+		# reusing data from an old lookup  
+		for l in self.lookups:
+			if target_id == l.target_id:
+				l.done = 0 
+				new_lookup = False 
+				for n in l.list:
+					# discard doubtful node 
+					if n.pinged >= 3 or n.last_replied < get_time() - 120 * 60:
+						l.remove(n)
+				# get some new lookup nodes 
+				l = self.router.get_lookup_nodes(l, target_id)
+				# self.lookup_step()
+				break 
+
+		if new_lookup:
+			self.lookup_id += 1 
+			newest = Lookup(target_id, self.lookup_id, SEARCH_CAPACITY)
+			oldest = None 
+			# find the oldest lookup
+			for l in self.lookups:
+				if l.done and (oldest == None or l.step_time < oldest.step_time):
+					oldest = l 
+			# if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
+			if oldest and oldest.step_time < get_time() - DHT_SEARCH_EXPIRE_TIME:
+				index = self.lookups.index(oldest) 
+				self.lookups[index] = newest
+			else:
+				self.lookups.append(newest)
+
+			newest = self.router.get_lookup_nodes(newest, target_id)
+			newest.port = port 
+			# self.lookup_step()
+
+			# log (newest.get_all_ids(), "\n")
+
+		# update lookup_time 
+		self.lookup_time = get_time()

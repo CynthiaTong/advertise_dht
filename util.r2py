@@ -57,3 +57,7 @@ def token_match(token, ip, old_secret, secret):
 	if now_hash == token: return True 
 
 	return False 
+
+LID_BIT_SIZE = 16 
+def make_lid():
+	return random_nbit_int(LID_BIT_SIZE)
