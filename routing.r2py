@@ -76,7 +76,8 @@ class RoutingTable:
 				if n.pinged >= 3 and n.last_pinged < get_time() - 15:
 					log ("Node ", n.long_id, " gets pinged.\n")
 					tid = make_tid("pn", 0)
-					# SEND PING! 
+					# Ping that node 
+					RPC.ping(n.ip, n.port, tid, 4)
 					n.pinged += 1 
 					n.last_pinged = get_time()
 					break 
@@ -151,9 +152,18 @@ class RoutingTable:
 		for n in nodes:
 			lookup.insert(n, 0, None) # node, replied, token
 
+	def pinged(self, node, bucket=None):
+		node.pinged += 1 
+		node.last_pinged = get_time()
+		if node.pinged >= 3:
+			if bucket:
+				self.ping_replacement(bucket)
+			else:
+				self.ping_replacement(self.find_bucket(node)[1])
+
 	def ping_replacement(self, bucket):
 		tid = make_tid("pn", 0)
 		if len(bucket.replacements) > 0:
 			top = bucket.replacements[-1]
 			log ("Sending ping to replacement node.\n")
-			RPC.ping(top.ip, top.port, tid)
+			RPC.ping(top.ip, top.port, tid, 4)
