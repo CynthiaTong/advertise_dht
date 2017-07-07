@@ -15,6 +15,7 @@ class RoutingTable:
 		self.buckets = [Bucket(0, 2**160, self.ksize)]
 
 	def split_bucket(self, index):
+		# send_cached_ping ?? 
 		bucket_1, bucket_2 = self.buckets[index].split()
 		self.buckets[index] = bucket_1 
 		self.buckets.insert(index+1, bucket_2)
@@ -36,6 +37,7 @@ class RoutingTable:
 					changed = True
 
 		if changed:
+			# send_cached_ping ??
 			self.expire_buckets_time = get_time() + 120 + random_int_below(240)
 
 
@@ -53,19 +55,18 @@ class RoutingTable:
 
 		index, bucket = self.find_bucket(node)
 
-		if bucket.add_node(node, message_type):
-			return True 
-	
-		# New node and bucket full 
-
 		# Remove a known bad node 
 		for n in bucket.nodes:
 			if not n.good_node():
-				removed = bucket.remove_node(n)
-				if removed:
-					log ("Node ", n.long_id, " gets removed. ", 
+				bucket.remove_node(n)
+				log ("Node ", n.long_id, " gets removed. ", 
 							n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
 				break 
+
+		if bucket.add_node(node, message_type):
+			return True 
+	
+		# New node and bucket full of good nodes 
 
 		# if table's owner node is in the bucket, split 
 		if bucket.in_range(self.id):
@@ -73,11 +74,15 @@ class RoutingTable:
 			# try adding again 
 			self.add_contact(node, message_type)
 		else: 
-			# Ping least recent seen node 
-			log ("Node ", bucket.get_oldest().long_id, " gets pinged.\n")
-			bucket.get_oldest().pinged += 1  
-			# ADD PING!! 
-
+			for n in bucket.nodes:
+				# find a dubious node to Ping 
+				if n.pinged >= 3 and n.last_pinged < get_time() - 15:
+					log ("Node ", n.long_id, " gets pinged.\n")
+					tid = make_tid("pn", 0)
+					# SEND PING! 
+					n.pinged += 1 
+					n.last_pinged = get_time()
+					break 
 			# add to bucket's replacement list 
 			bucket.add_replacement(node, message_type)
 
@@ -85,11 +90,19 @@ class RoutingTable:
 	def get_unvisited_buckets(self):
 		return [b for b in self.buckets if get_time() - b.last_visited >= 3600]
 
+	def find_node(self, target_id):
+		i, bucket = self.find_bucket(target_id)
+		for n in bucket.get_nodes():
+			if n.id == target_id:
+				return n 
+		return None 
+
 	# find proper bucket for contact (id in bucket's range)
 	# return index and the bucket itself 
-	def find_bucket(self, node):
+	def find_bucket(self, *args):
+		arg = args[0]
 		for b in self.buckets:
-			if b.in_range(node):
+			if b.in_range(arg):
 				return self.buckets.index(b), b
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
@@ -102,7 +115,7 @@ class RoutingTable:
 		for b in self.buckets:
 			for n in b.get_nodes():
 				if n.good_node():
-					lookup.insert(n)
+					lookup.insert(n, 0, None)
 		# Note: closest in this list at head 
 		return lookup
 
@@ -110,7 +123,7 @@ class RoutingTable:
 	# (above get_closest_nodes function)
 	def get_lookup_nodes(self, lookup, target_id):
 		# find the bucket and add its nodes 
-		current_index, current_bucket = self.find_bucket(Node(target_id))
+		current_index, current_bucket = self.find_bucket(target_id)
 		self.add_to_lookup(current_bucket, lookup)
 
 		left_index = current_index - 1  
@@ -138,4 +151,4 @@ class RoutingTable:
 	def add_to_lookup(self, bucket, lookup):
 		nodes = bucket.get_nodes()
 		for n in nodes:
-			lookup.insert(n)
+			lookup.insert(n, 0, None) # node, replied, token
