@@ -35,7 +35,7 @@ class Bucket:
 			return False
 
 		self.update_time_info(node, message_type)
-		# log ("NEW NODE ", node.long_id, "  ", node.pinged, "  ", node.last_queried, "  ", node.last_replied ,"\n")
+		# log ("NEW NODE ", node.long_id, " ", node.pinged, " ", node.last_queried, " ", node.last_replied ,"\n")
 		return True
 
 	def add_replacement(self, node, message_type):
@@ -51,7 +51,7 @@ class Bucket:
 			node.last_queried = get_time()
 		else:
 			node.pinged = 0 
-			node.replied = True 
+			node.replied = 1 
 			node.last_replied = get_time()
 
 	def remove_node(self, node):
@@ -60,11 +60,12 @@ class Bucket:
 			return False
 
 		self.nodes.remove(node)
-		# try adding one node from the top of the replacement stack
-		if len(self.replacements) > 0:
+		# try adding a good node from the top of the replacement stack 
+		while len(self.replacements) > 0:
 			replacement_node = self.replacements.pop()
-			self.nodes.append(replacement_node)
-
+			if replacement_node.good_node():
+				self.nodes.append(replacement_node)
+				break 
 		return True
 
 	def split(self):

@@ -1,5 +1,6 @@
 dy_import_module_symbols("bucket.r2py")
 dy_import_module_symbols("lookup.r2py")
+dy_import_module_symbols("rpc.r2py")
 dy_import_module_symbols("util.r2py")
 dy_import_module_symbols("random.r2py")
 
@@ -14,9 +15,9 @@ class RoutingTable:
 	def initial_bucket(self):
 		self.buckets = [Bucket(0, 2**160, self.ksize)]
 
-	def split_bucket(self, index):
-		# send_cached_ping ?? 
-		bucket_1, bucket_2 = self.buckets[index].split()
+	def split_bucket(self, index, bucket):
+		self.ping_replacement(bucket)
+		bucket_1, bucket_2 = bucket.split()
 		self.buckets[index] = bucket_1 
 		self.buckets.insert(index+1, bucket_2)
 
@@ -29,17 +30,13 @@ class RoutingTable:
 
 	# purge all bad nodes with pinged value >= 4 
 	def purge_bad_nodes(self):
-		changed = False 
 		for b in self.buckets:
 			for n in b.nodes:
 				if n.pinged >= 4:
 					b.remove_node(n)
-					changed = True
-
-		if changed:
-			# send_cached_ping ??
-			self.expire_buckets_time = get_time() + 120 + random_int_below(240)
-
+					# ping a replacement node 
+					self.ping_replacement(b)
+					self.expire_buckets_time = get_time() + 120 + random_int_below(240)
 
 	"""
 		not necessarily "new" contact 
@@ -70,7 +67,7 @@ class RoutingTable:
 
 		# if table's owner node is in the bucket, split 
 		if bucket.in_range(self.id):
-			self.split_bucket(index)
+			self.split_bucket(index, bucket)
 			# try adding again 
 			self.add_contact(node, message_type)
 		else: 
@@ -83,8 +80,9 @@ class RoutingTable:
 					n.pinged += 1 
 					n.last_pinged = get_time()
 					break 
-			# add to bucket's replacement list 
-			bucket.add_replacement(node, message_type)
+			# add to bucket's replacement list if there's space left 
+			if len(bucket.replacements) < self.ksize:
+				bucket.add_replacement(node, message_type)
 
 	# get buckets that haven't been queried in the last hour (to refresh)
 	def get_unvisited_buckets(self):
@@ -152,3 +150,10 @@ class RoutingTable:
 		nodes = bucket.get_nodes()
 		for n in nodes:
 			lookup.insert(n, 0, None) # node, replied, token
+
+	def ping_replacement(self, bucket):
+		tid = make_tid("pn", 0)
+		if len(bucket.replacements) > 0:
+			top = bucket.replacements[-1]
+			log ("Sending ping to replacement node.\n")
+			RPC.ping(top.ip, top.port, tid)
