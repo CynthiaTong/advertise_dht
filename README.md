@@ -1,23 +1,17 @@
 ## Questions 
    
-   - IPV4 / V6? 
-   
    
 ## Problems
    
-   - `Internal Error` while executing routing.r2py and rpc.r2py: 
    
-      ```
-      Exception (with class 'socket.error'): [Errno 1] Operation not permitted
-      ```
-
 ## To-dos 
 
-   - Implement node lookup 
-
+   - Parse bencoded messages
+   
+   - Implement responding methods 
+   
+   - Figure out how to use Seattle's networking functions 
+  
    - Figure out about the peerfile required to run jech's example code
    
-   - Figure out the bencoding format 
- 
-   - Implement RPC class 
-  
+   
