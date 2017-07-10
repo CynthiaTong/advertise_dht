@@ -6,11 +6,13 @@ dy_import_module_symbols("random.r2py")
 
 class RoutingTable:
 
-	def __init__(self, long_id, ksize):
-		self.id = long_id
+	def __init__(self, string_id, ksize, storage):
+		self.id = string_id
+		self.long_id = string_to_long(string_id, 20)
 		self.ksize = ksize 
 		self.expire_buckets_time = 0  
 		self.initial_bucket()
+		self.rpc = RPC(string_id, self, storage)
 
 	def initial_bucket(self):
 		self.buckets = [Bucket(0, 2**160, self.ksize)]
@@ -47,7 +49,7 @@ class RoutingTable:
 	def add_contact(self, node, message_type):
 
 		# never add if the node ID is identical to our own ID  
-		if node.long_id == self.id:
+		if node.long_id == self.long_id:
 			return False 
 
 		index, bucket = self.find_bucket(node)
@@ -66,7 +68,7 @@ class RoutingTable:
 		# New node and bucket full of good nodes 
 
 		# if table's owner node is in the bucket, split 
-		if bucket.in_range(self.id):
+		if bucket.in_range(self.long_id):
 			self.split_bucket(index, bucket)
 			# try adding again 
 			self.add_contact(node, message_type)
@@ -77,7 +79,7 @@ class RoutingTable:
 					log ("Node ", n.long_id, " gets pinged.\n")
 					tid = make_tid("pn", 0)
 					# Ping that node 
-					RPC.ping(n.ip, n.port, tid, 4)
+					self.rpc.ping(n.ip, n.port, tid, 4)
 					n.pinged += 1 
 					n.last_pinged = get_time()
 					break 
@@ -106,17 +108,54 @@ class RoutingTable:
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
 
-	# Get the strictly closest good nodes to a given target ID 
-	def get_closest_good_nodes(self, target_id, tid, search_size=None):
-		search_size = search_size or self.ksize
-		lookup = Lookup(target_id, tid, search_size)
+	# # Get the strictly closest good nodes to a given target ID 
+	# def get_closest_good_nodes(self, target_id, tid, search_size=None):
+	# 	search_size = search_size or self.ksize
+	# 	lookup = Lookup(target_id, tid, search_size)
+	# 	# linear scan through the routing table, and add to lookup list 
+	# 	for b in self.buckets:
+	# 		for n in b.get_nodes():
+	# 			if n.good_node():
+	# 				lookup.insert(n, 0, None)
+	# 	# Note: closest in this list at head 
+	# 	return lookup
+
+	def insert_closest_node(self, nodes_list, target_id, node):
+		i = 0 
+		while i < len(nodes_list):
+			i_id = nodes_list[i][:20]
+			# if node info is already in nodes_list, return 
+			if node.id == i_id:
+				return nodes_list 
+			if compare_distance(target_id, node.long_id, string_to_long(i_id, 20)) < 0:
+				break 
+			i += 1 
+		# if list is full, return 
+		if i >= self.ksize:
+			return nodes_list
+		# otherwise construct and add to list 
+		# Note: both ip & port needs to be "compact" and in network byte order 
+		packed_ip = ip_to_packed(node.ip)
+		# should be Big Endian!! 
+		network_order_port = str(node.port) 
+		nodes_list.insert(i, packed_ip + network_order_port)
+
+		while len(nodes_list) > self.ksize:
+			nodes_list.pop()
+
+		return nodes_list 
+
+	# Get the strictly closest good nodes to a given target ID (for sending response)
+	# IMPORTANT: target_ids are INTs! 
+	def get_closest_good_nodes(self, target_id):
+		nodes_list = list()
 		# linear scan through the routing table, and add to lookup list 
 		for b in self.buckets:
 			for n in b.get_nodes():
 				if n.good_node():
-					lookup.insert(n, 0, None)
-		# Note: closest in this list at head 
-		return lookup
+					nodes_list = self.insert_closest_node(nodes_list, target_id, n)
+		log (len(nodes_list) , " nodes in nodes_list.\n")
+		return nodes_list 
 
 	# Might just need to scan the whole routing table to find STRICTLY closest 
 	# (above get_closest_nodes function)
@@ -166,4 +205,10 @@ class RoutingTable:
 		if len(bucket.replacements) > 0:
 			top = bucket.replacements[-1]
 			log ("Sending ping to replacement node.\n")
-			RPC.ping(top.ip, top.port, tid, 4)
+			self.rpc.ping(top.ip, top.port, tid, 4)
+
+	def __str__(self):
+		output = ""
+		for b in self.buckets:
+			output += "----------\n" + str(b) + "\n"
+		return output 
