@@ -7,23 +7,26 @@ LOOKUP_CAPACITY = 14
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
 DHT_MAX_LOOKUPS = 1024 # why?
 DHT_EVENT_LOOKUPS_DONE = 3 
-
+BUF_SIZE = 512 
+LARGE_BUF_SIZE = 2048 
 # Question: my_v ??
 
-BUF_SIZE = 512 
 
 class RPC:
-	def __init__(self, string_id, storage):
+	def __init__(self, string_id, routing_table, storage):
 		self.id = string_id 
-		self.storage = storage 
+		self.router = routing_table
+		self.storage = storage
 
+	"""
+		QUERY METHODS 
+	"""
 	def ping(self, ip, port, tid, tid_len):
 		buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self.id, tid_len, tid)
 		# log (buf, "\n")
 		if len(buf) <= BUF_SIZE:
 			return buf 
 			# return dht_send(buf, buf_len, 0, socket_address, address_len)
-		return False 
 
 	def find_node(self, tid, tid_len, target_id):
 		buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s1:y1:qe" % 
@@ -31,16 +34,14 @@ class RPC:
 		if len(buf) <= BUF_SIZE:
 			# log (buf, "\n")
 			return buf 
-		return False 
 
 	# no ipv6 support here 
 	def get_peers(self, ip, port, tid, tid_len, info_hash):	
 		buf = ("d1:ad2:id20:%s9:info_hash20:%se1:q9:get_peers1:t%d:%s1:y1:qe" % 
 					(self.id, info_hash, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
-			# log (buf, "\n")
+			log (buf, "\n")
 			return buf 
-		return False 
 
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
@@ -48,133 +49,41 @@ class RPC:
 		if len(buf) <= BUF_SIZE:
 			# log (buf, "\n")
 			return buf # send 
-		return False 
+
+	"""
+		REPLY METHODS 
+	"""
+	def pong(self, ip, port, tid, tid_len):
+		buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
+		if len(buf) <= BUF_SIZE:
+			return buf 
 
 
+	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token, token_len):
+		target_id_long = string_to_long(target_id_str, 20)
+		nodes_list = self.router.get_closest_good_nodes(target_id_long)
+		nodes_str = ''.join(nodes_list)
+		nodes_len = len(nodes_list) * 6 
+		log (nodes_list, "\t", nodes_str,"\n")
+		log (len(nodes_str), "\t", nodes_len, "\n")
+		# retrieve peers with target_id_str from storage  
+		peers_list = self.storage.retrieve(target_id_str)
+		self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
-class DHT_Lookup:
+	def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
+		buf = "d1:rd2:id20:%s" % self.id 
+		# add nodes string  
+		buf += "5:nodes%d:%s" % (nodes_len, nodes_str)
+		if token_len > 0:
+			buf += "5:token%d:%s" % (token_len, token)
 
-	def __init__(self, routing_table):
-		self.router = routing_table
-		self.lookups = list()
-		self.lookup_id = make_lid()
-		self.lookup_time = 0 
-
-	def dht_lookup(self, target_id, port, callback):
-		new_lookup = True 
-
-		# reusing data from an old lookup  
-		for l in self.lookups:
-			if target_id == l.target_id:
-				l.done = 0 
-				new_lookup = False 
-				for n in l.get_nodes():
-					# discard dubious node 
-					if n.pinged >= 3 or n.last_replied < get_time() - 120 * 60:
-						l.remove(n)
-				# get some new lookup nodes 
-				l = self.router.get_lookup_nodes(l, target_id)
-				self.lookup_step(l, callback)
-				break 
-
-		if new_lookup:
-			self.lookup_id += 1 
-			newest = Lookup(target_id, self.lookup_id, LOOKUP_CAPACITY)
-			oldest = None 
-			# find the oldest lookup
-			for l in self.lookups:
-				if l.done and (oldest == None or l.step_time < oldest.step_time):
-					oldest = l 
-			# if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
-			if oldest and oldest.step_time < get_time() - DHT_LOOKUP_EXPIRE_TIME:
-				index = self.lookups.index(oldest) 
-				self.lookups[index] = newest
-			else:
-				self.lookups.append(newest)
-
-			newest = self.router.get_lookup_nodes(newest, target_id)
-			newest.port = port 
-			self.lookup_step(newest, callback)
-			# log (newest.get_all_ids(), "\n")
-		# update lookup_time 
-		self.lookup_time = get_time()
-		# callback(DHT_EVENT_LOOKUP_DONE, target_id)
-
-	def lookup_step(self, lookup, callback):
-		finished = False 
-		# see if we have got reply from k (8) live nodes 
-		all_replied = lookup.all_replied()
-
-		# if we have k live nodes 
-		if all_replied:
-			# finished for pure lookup 
-			if lookup.port == 0:
-				finished = True 
-			else: 
-				all_acked = True 
-				count = 0 
-				for n in lookup.get_nodes():
-					if n.pinged >= 3:
-						continue 
-					if n.token == None: # ?? 
-						n.acked = 1 
-					if not n.acked:
-						all_acked = False 
-						log ("Sending announce peer. \n")
-						tid = make_tid("ap", lookup.tid)
-						RPC.announce_peer(n.ip, n.port, tid, 4, lookup.target_id, n.token, len(n.token))
-						n.pinged += 1 
-						n.last_req = get_time()
-						# find node with this id in routing table 
-						router_node = self.router.find_node(n.long_id)
-						if router_node:
-							self.router.pinged(router_node)
-				if all_acked:
-					finished = True 
-			lookup.step_time = get_time()
-			return 
-
-		# if not all replied 
-		# ignore too frequent lookups 
-		if lookup.step_time > get_time() - 15:
-			return 
-
-		# send alpha (3) get_peers requests 
-		send_count = 0 
-		for n in lookup.get_nodes():
-			send_count += self.lookup_get_peers(lookup, n)
-			if send_count >= 3:
-				break 
-
-		if finished:
-			lookup.done = 1 
-			lookup.step_time = get_time()
-			if callback:
-				callback(DHT_EVENT_LOOKUP_DONE, lookup.target_id)
-
-		lookup.step_time = get_time()
-
-	def lookup_get_peers(self, lookup, node):
-		if not node:
-			for n in lookup.get_nodes():
-				if n.pinged < 3 and not n.replied and n.last_req < get_time() - 15:
-					node = n 
-
-		if not node or node.pinged >=3 or node.last_req > get_time() - 15:
-			return False 
-
-		log ("Sending get_peers.\n")
-		tid = make_tid("gp", lookup.tid)
-		# send get_peers 
-		RPC.get_peers(node.ip, node.port, tid, 4, lookup.target_id)
-		node.pinged += 1 
-		node.last_req = get_time()
-		router_node = self.router.find_node(node.long_id)
-		if router_node:
-			self.router.pinged(router_node)
-		return True 
-
-
-def callback(EVENT, id, data=None, data_len=0):
-	log (EVENT, "\t", id, "\n")
-
+		if peers_list and len(peers_list) > 0:
+			buf += "6:valuesl"
+			for p in peers_list:
+				# !! port needs to be big endian 
+				buf += "%d:%s" % (6, p.ip + p.port)
+			buf += "e"
+		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
+		if len(buf) <= LARGE_BUF_SIZE:
+			log (buf, "\n")
+			return buf 
