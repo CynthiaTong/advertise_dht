@@ -1,40 +1,61 @@
-dy_import_module_symbols("node.r2py")
 dy_import_module_symbols("util.r2py")
+
+TTL = 32 * 60 
 
 class Storage: 
 
-	def __init__(self, long_id, ttl=86410):
+	def __init__(self, string_id, ttl=TTL):
 		"""
-			Default storage expire time: 24h + 10s 
+			Default storage expire time: 32 min 
 		"""
-		self.id = long_id
+		self.id = string_id
 		self.ttl = ttl  
-		self.peers = dict()
+		self.peers = dict() # dictionary of arrays of peer objects 
 
-	def set(self, key, value):
-		if key in self.peers:
-			self.peers[key][0] = get_time()
-		else: 
-			self.peers[key] = (get_time(), value)		
+	# store the <id, ip, port> triple into peers dict 
+	def store(self, id_key, ip, port):
+		storage_val = self.peers.get(id_key)
 
-	def get(self, key):
-		if key in self.peers:
-			return self.peers[key][1]	
+		if storage_val == None:
+			self.peers[id_key] = [Peer(ip, port, get_time())]
 		else:
-			return None 
+			new_val = True 
+			for v in storage_val:
+				if ip == v.ip and port == v.port:
+					v.update_time(get_time())
+					new_val = False 
+			if new_val:
+				storage_val.append(Peer(ip, port, get_time()))
+
+	# should be called frequently 
+	def expire_storage(self):
+		for key, value in self.peers.items():
+			# log (value, "\n")
+			filtered = [p for p in value if get_time() - p.stored_time < self.ttl]
+			# log (filtered, "\n") 
+			self.peers[key] = filtered
 
 	def __iter__(self):
 		return iter(self.peers)
 
-	# should be called by the node frequently 
-	def expire_data(self):
-		for key in self.peers.keys():
-			if get_time() - self.peers[key][0] > self.ttl:
-				del self.peers[key]
-
 	def __str__(self):
 		output = "Storage: \n"
-		for p in self.peers:
-			age = get_time() - self.peers[p][0] 
-			output += p + " : " + self.peers[p][1] + "\t Age: " + str(age) + " secs\n"
+		for key, value in self.peers.items():
+			for p in value:
+				output += str(p) + "\t" 
+			output += "\n"
 		return output 
+
+
+class Peer:
+	def __init__(self, ip, port, time):
+		self.ip = ip 
+		self.port = str(port)
+		self.stored_time = time
+
+	def update_time(self, time):
+		self.stored_time = time 
+
+	def __str__(self):
+		age = get_time() - self.stored_time
+		return self.ip + ":" + str(self.port) + "  Age: " + str(age) + " secs"
