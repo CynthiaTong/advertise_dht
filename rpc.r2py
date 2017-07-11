@@ -7,10 +7,9 @@ LOOKUP_CAPACITY = 14
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
 DHT_MAX_LOOKUPS = 1024 # why?
 DHT_EVENT_LOOKUPS_DONE = 3 
-BUF_SIZE = 512 
-LARGE_BUF_SIZE = 2048 
+BUF_SIZE = 64 #BYTES 
+LARGE_BUF_SIZE = 256 
 # Question: my_v ??
-
 
 class RPC:
 	def __init__(self, string_id, routing_table, storage):
@@ -46,9 +45,9 @@ class RPC:
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
 					(self.id, info_hash, htons(port), token_len, token, tid_len, tid))
-		if len(buf) <= BUF_SIZE:
-			# log (buf, "\n")
-			return buf # send 
+		# if len(buf) <= BUF_SIZE:
+		log (buf, "\n")
+		return buf # send 
 
 	"""
 		REPLY METHODS 
@@ -67,7 +66,10 @@ class RPC:
 		log (len(nodes_str), "\t", nodes_len, "\n")
 		# retrieve peers with target_id_str from storage  
 		peers_list = self.storage.retrieve(target_id_str)
-		log (peers_list, "\n")
+		# if peers_list:
+		# 	for p in peers_list:
+		# 		log (p, "\n")
+		# 	log ("---------\n")
 		self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
 	def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
@@ -82,7 +84,8 @@ class RPC:
 			buf += "6:valuesl"
 			for p in peers_list:
 				# !! port needs to be big endian 
-				buf += "%d:%s" % (6, p.ip + htos(p.port))
+				buf += "%d:%s%s" % (6, ip_to_packed(p.ip), str(htons(p.port)))
+				log (ip_to_packed(p.ip), "\n")
 			buf += "e"
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
@@ -103,3 +106,145 @@ class RPC:
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
 			return buf 
+
+
+	def length_check(self, index, length, buf_len):
+		if index + length > buf_len:
+			log ("Failed length check.\n")
+			return False 
+		return True 
+
+	def parse_message(self, buf, tid_len=4, token_len=16, nodes_len=8, values_len=256): 
+		# change string.find to a more efficient method??
+		buf_len = len(buf)
+		tid = sender_id = info_hash = target = token = nodes = ""
+		values = ""
+		port = 0 
+
+		# parse tid if it exists and adheres to our rule 
+		p = buf.find("1:t")
+		if p > -1:
+			l = int(buf[p+3])
+			if (0 < l <= tid_len and buf[l+1] == ":" and 
+					self.length_check(l+2, tid_len, buf_len)):
+				tid = buf[l+2:2*l+2]
+				tid_len = l 
+			else:
+				tid_len = 0 
+		else:
+			tid_len = 0 
+
+	#!!!random bytes does not return 20 bytes ???
+		p = buf.find("2:id20:")
+		if p > -1:
+			if self.length_check(p+7, 20, buf_len):
+				sender_id = buf[p+7:p+7+20]
+				log (sender_id, "\n")
+			else:
+				sender_id = 0 
+
+		p = buf.find("9:info_hash20:")
+		if p > -1:
+			if self.length_check(p+14, 20, buf_len):
+				info_hash = buf[p+14:p+14+20]
+			else:
+				info_hash = 0 
+
+		p = buf.find("porti")
+		if p > -1:
+			n_str = ""
+			q = p+5
+			while q < buf_len and buf[q].isdigit():
+				n_str += buf[q]
+				q += 1 
+			n = int(n_str)
+			if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
+				# log (n, "\n")
+				port = n
+
+		p = buf.find("6:target20:")
+		if p > -1:
+			if self.length_check(p+11, 20, buf_len):
+				target = buf[p+11:p+11+20]
+				log(target, "\n")
+			else:
+				target = 0 
+
+		p = buf.find("5:token")
+		if p > -1:
+			l_str = ""
+			q = p+7 
+			while q < buf_len and buf[q].isdigit():
+				l_str += buf[q]
+				q += 1 
+			l = int(l_str)
+			if (0 < l <= token_len and buf[q] == ":" and 
+					self.length_check(p+7, token_len, buf_len)):
+				token = buf[q+1:q+1+l]
+				token_len = l 
+				# log (token, "\t", token_len, "\n")
+			else: 
+				token_len = 0 
+		else:
+			token_len = 0
+
+		p = buf.find("5:nodes")
+		if p > -1:
+			l_str = ""
+			q = p+7 
+			while q < buf_len and buf[q].isdigit():
+				l_str += buf[q]
+				q += 1 
+			l = int(l_str)
+			if (0 < l <= nodes_len and buf[q] == ":" and 
+					self.length_check(p+7, nodes_len, buf_len)):
+				nodes = buf[q+1:q+1+l]
+				nodes_len = l 
+			else:
+				nodes_len = 0 
+		else:
+			nodes_len = 0  
+
+		# parse values 
+		p = buf.find("6:valuesl")
+		if p > -1:
+			q = p+9 
+			while True: 
+				l_str = ""			
+				while q < buf_len and buf[q].isdigit():
+					l_str += buf[q]
+					q += 1 
+				l = int(l_str)
+				log (l, "\n")
+				if buf[q] and buf[q] == ":" and l == 6:
+					values += buf[q+1:q+1+l]
+					q += 1+l
+				else:
+					log ("Received weird value -- %d bytes.\n" % l )
+					break 
+			log ("Values: ", values, "\n")
+			if buf[q] and buf[q] == "e":
+				values_len = q - (p+9)
+			else:
+				log ("Unexpected end for values.\n")
+		else:
+			values_len = 0 
+
+
+		if buf.find("1:y1:r") > -1:
+			# log ("REPLY\n")
+			return "REPLY" 
+		if buf.find("1:y1:e") > -1:
+			return "ERROR"
+		if buf.find("1:y1:q") == -1:
+			return -1  
+		if buf.find("1:q4:ping") > -1:
+			return "PING"
+		if buf.find("1:q9:find_node") > -1:
+			return "FIND_NODE"
+		if buf.find("1:q9:get_peers") > -1:
+			return "GET_PEERS"
+		if buf.find("1:q13:announce_peer") > -1:
+			return "ANNOUNCE_PEER"
+
+		return -1 
