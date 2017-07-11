@@ -7,26 +7,20 @@ def get_time():
 	time_updatetime(timeport)
 	return time_gettime()
 
-# 4-byte transaction ids ??? without using bytearray? 
+# 4-byte (or less?) transaction id string  
 def make_tid(prefix, sequence):
-	output = [ord(n) & 0xFF for n in prefix]
-	# log (int(sequence).bit_length(),"\n")
+	output = ""
+	for n in prefix:
+		output += chr(ord(n) & 0xFF) 
 	binary_seq = "{0:b}".format(sequence)[:16] # get the first 16 bits (2 bytes) of the integer 
-	# log (len(binary_seq), "\n")
-	output.append(int(binary_seq, 2))
-	# log (output[2].bit_length(), "\n")
+	output += str(int(binary_seq, 2))
 	# log(output, "\n")
-	# total_bytes = 0 
-	# for n in output:
-	# 	total_bytes += (n.bit_length() + 7) // 8 
-	# log(total_bytes, "\n")
-
-	# return a character list 
+	# return a character / int list 
 	return output 
 
 # return the sequence taken from tid if matches, else return -1 
 def tid_match(tid, prefix):
-	if tid[0] == ord(prefix[0]) and tid[1] == ord(prefix[1]):
+	if tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
 		return tid[2]
 	else:
 		return -1 
@@ -46,6 +40,7 @@ def rotate_secret(secret=None):
 
 	return (old_secret, secret, rotate_secret_time)
 
+# 20 byte token 
 def make_token(ip, secret):
 	return sha_hash(str(ip) + secret)
 
@@ -61,3 +56,31 @@ def token_match(token, ip, old_secret, secret):
 LID_BIT_SIZE = 16 
 def make_lid():
 	return random_nbit_int(LID_BIT_SIZE)
+
+# Converts some number of random bytes into a number
+# Treats random data as an unsigned long.
+def string_to_long(data, bytes):
+  # Store the number
+  num = 0L
+  offset = 0
+  for char in data:
+    num |= ord(char) << offset * 8
+    offset += 1
+
+  return num
+
+def xor_distance(num1, num2):
+	return num1 ^ num2 
+
+# if positive, dist from num1 > dist from num2 
+def compare_distance(target, num1, num2):
+	return xor_distance(target, num1) - xor_distance(target, num2)
+
+def ip_to_packed(ip):
+	hex_list = list()
+	for x in ip.split('.'):
+		hex_list.append(chr(int(x)))
+	return ''.join(hex_list)
+
+def htons(num):
+	return (num & 0xFF << 8) | (num & 0xFF00 >> 8)

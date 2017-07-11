@@ -45,7 +45,7 @@ class RPC:
 
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
-					(self.id, info_hash, port, token_len, token, tid_len, tid))
+					(self.id, info_hash, htons(port), token_len, token, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
 			# log (buf, "\n")
 			return buf # send 
@@ -58,7 +58,6 @@ class RPC:
 		if len(buf) <= BUF_SIZE:
 			return buf 
 
-
 	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token, token_len):
 		target_id_long = string_to_long(target_id_str, 20)
 		nodes_list = self.router.get_closest_good_nodes(target_id_long)
@@ -68,12 +67,14 @@ class RPC:
 		log (len(nodes_str), "\t", nodes_len, "\n")
 		# retrieve peers with target_id_str from storage  
 		peers_list = self.storage.retrieve(target_id_str)
+		log (peers_list, "\n")
 		self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
 	def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
 		buf = "d1:rd2:id20:%s" % self.id 
 		# add nodes string  
 		buf += "5:nodes%d:%s" % (nodes_len, nodes_str)
+
 		if token_len > 0:
 			buf += "5:token%d:%s" % (token_len, token)
 
@@ -81,9 +82,24 @@ class RPC:
 			buf += "6:valuesl"
 			for p in peers_list:
 				# !! port needs to be big endian 
-				buf += "%d:%s" % (6, p.ip + p.port)
+				buf += "%d:%s" % (6, p.ip + htos(p.port))
 			buf += "e"
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
+			log (buf, "\n")
+			return buf 
+
+	def peer_announced(self, ip, port, tid, tid_len):
+		buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
+		if len(buf) <= BUF_SIZE:
+			log (buf, "\n")
+			return buf 
+
+	def send_error(self, ip, port, tid, tid_len, error_code, error_msg):
+		msg_len = len(error_msg)
+		buf = "d1:eli%de%d:%s" % (error_code, msg_len, error_msg)
+		buf += "e1:t%d:%s1:y1:ee" % (tid_len, tid)
+
+		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
 			return buf 
