@@ -22,7 +22,7 @@ class RPC:
 	"""
 	def ping(self, ip, port, tid, tid_len):
 		buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self.id, tid_len, tid)
-		# log (buf, "\n")
+		log (buf, "\n")
 		if len(buf) <= BUF_SIZE:
 			return buf 
 			# return dht_send(buf, buf_len, 0, socket_address, address_len)
@@ -31,7 +31,7 @@ class RPC:
 		buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s1:y1:qe" % 
 					(self.id, target_id, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
-			# log (buf, "\n")
+			log (buf, "\n")
 			return buf 
 
 	# no ipv6 support here 
@@ -55,6 +55,7 @@ class RPC:
 	def pong(self, ip, port, tid, tid_len):
 		buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
 		if len(buf) <= BUF_SIZE:
+			log (buf, "\n")
 			return buf 
 
 	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token, token_len):
@@ -62,7 +63,7 @@ class RPC:
 		nodes_list = self.router.get_closest_good_nodes(target_id_long)
 		nodes_str = ''.join(nodes_list)
 		nodes_len = len(nodes_list) * 6 
-		log (nodes_list, "\t", nodes_str,"\n")
+		# log (nodes_list, "\t", nodes_str,"\n")
 		# log (len(nodes_str), "\t", nodes_len, "\n")
 		# retrieve peers with target_id_str from storage  
 		peers_list = self.storage.retrieve(target_id_str)
@@ -85,7 +86,7 @@ class RPC:
 			for p in peers_list:
 				# !! port needs to be big endian 
 				buf += "%d:%s%s" % (6, ip_as_bytes(p.ip), str(htons(p.port)))
-				log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
+				# log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
 			buf += "e"
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
@@ -126,10 +127,12 @@ class RPC:
 		p = buf.find("1:t")
 		if p > -1:
 			l = int(buf[p+3])
-			if (0 < l <= tid_len and buf[l+1] == ":" and 
-					self.length_check(l+2, tid_len, buf_len)):
-				tid = buf[l+2:2*l+2]
-				tid_len = l 
+			if 0 < l <= tid_len and buf[p+4] == ":":
+				k = p+5
+				while not (buf[k] == "1" and buf[k+1] == ":"):
+					tid += buf[k]
+					k += 1 
+				tid_len = len(tid)
 				log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
 			else:
 				tid_len = 0 
@@ -198,8 +201,7 @@ class RPC:
 				l_str += buf[q]
 				q += 1 
 			l = int(l_str)
-			if (0 < l <= nodes_len and buf[q] == ":" and 
-					self.length_check(p+7, nodes_len, buf_len)):
+			if 0 < l <= nodes_len and buf[q] == ":":
 				k = q+1
 				while not (buf[k] == "5" and buf[k+1] == ":"):
 					nodes.append(ord(buf[k]))
@@ -244,19 +246,26 @@ class RPC:
 
 
 		if buf.find("1:y1:r") > -1:
-			# log ("REPLY\n")
+			log ("REPLY\n")
 			return "REPLY" 
 		if buf.find("1:y1:e") > -1:
+			log ("ERROR\n")
 			return "ERROR"
 		if buf.find("1:y1:q") == -1:
+			log ("-1\n")
 			return -1  
 		if buf.find("1:q4:ping") > -1:
+			log ("PING\n")
 			return "PING"
 		if buf.find("1:q9:find_node") > -1:
+			log ("FIND_NODE\n")
 			return "FIND_NODE"
 		if buf.find("1:q9:get_peers") > -1:
+			log ("GET_PEERS\n")
 			return "GET_PEERS"
 		if buf.find("1:q13:announce_peer") > -1:
+			log ("ANNOUNCE_PEER\n")
 			return "ANNOUNCE_PEER"
-
+		
+		log ("-1\n")
 		return -1 
