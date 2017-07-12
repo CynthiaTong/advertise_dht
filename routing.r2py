@@ -1,3 +1,4 @@
+dy_import_module_symbols("node.r2py")
 dy_import_module_symbols("bucket.r2py")
 dy_import_module_symbols("lookup.r2py")
 dy_import_module_symbols("rpc.r2py")
@@ -46,7 +47,8 @@ class RoutingTable:
 			0 for reply 
 			1 for query 
 	"""
-	def add_contact(self, node, message_type):
+	def add_contact(self, sender_id, ip, port, message_type):
+		node = Node(sender_id, ip, port)
 
 		# never add if the node ID is identical to our own ID  
 		if node.long_id == self.long_id:
@@ -71,7 +73,7 @@ class RoutingTable:
 		if bucket.in_range(self.long_id):
 			self.split_bucket(index, bucket)
 			# try adding again 
-			self.add_contact(node, message_type)
+			self.add_contact(sender_id, ip, port, message_type)
 		else: 
 			for n in bucket.nodes:
 				# find a dubious node to Ping 
@@ -102,23 +104,14 @@ class RoutingTable:
 	# return index and the bucket itself 
 	def find_bucket(self, *args):
 		arg = args[0]
+		if not (isinstance(arg, Node) or isinstance(arg, (int, long))):
+			raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % 
+												type(arg))
 		for b in self.buckets:
 			if b.in_range(arg):
 				return self.buckets.index(b), b
 
 		raise ValueError("Node ID not in range: 0 - 2**160")
-
-	# # Get the strictly closest good nodes to a given target ID 
-	# def get_closest_good_nodes(self, target_id, tid, search_size=None):
-	# 	search_size = search_size or self.ksize
-	# 	lookup = Lookup(target_id, tid, search_size)
-	# 	# linear scan through the routing table, and add to lookup list 
-	# 	for b in self.buckets:
-	# 		for n in b.get_nodes():
-	# 			if n.good_node():
-	# 				lookup.insert(n, 0, None)
-	# 	# Note: closest in this list at head 
-	# 	return lookup
 
 	def insert_closest_node(self, nodes_list, target_id, node):
 		i = 0 
@@ -135,10 +128,10 @@ class RoutingTable:
 			return nodes_list
 		# otherwise construct and add to list 
 		# Note: both ip & port needs to be "compact" and in network byte order 
-		packed_ip = ip_to_packed(node.ip)
-		# should be Big Endian!! 
-		network_order_port = str(node.port) 
-		nodes_list.insert(i, packed_ip + network_order_port)
+		packed_ip = ip_as_bytes(node.ip)
+		# convert port to network order 
+		network_order_port = str(htons(node.port)) 
+		nodes_list.insert(i, node.id + packed_ip + network_order_port)
 
 		while len(nodes_list) > self.ksize:
 			nodes_list.pop()
@@ -160,6 +153,10 @@ class RoutingTable:
 	# Might just need to scan the whole routing table to find STRICTLY closest 
 	# (above get_closest_nodes function)
 	def get_lookup_nodes(self, lookup, target_id):
+
+		if not isinstance(lookup, Lookup):
+			raise TypeError("get_lookup_nodes did not receive Lookup instance.")
+
 		# find the bucket and add its nodes 
 		current_index, current_bucket = self.find_bucket(target_id)
 		self.add_to_lookup(current_bucket, lookup)
