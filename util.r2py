@@ -81,18 +81,20 @@ def ip_as_bytes(ip):
 	ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
 	return ip_as_bytes
 
-
 def htons(num):
 	# if integer is 2-byte 
 	if (num.bit_length() + 7) // 8 == 2:
-		n = (num & 0xFF << 8) | (num & 0xFF00 >> 8)
+		n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
+		# log (n, "\n")
 		return _random_long_to_bytes(n)
 	log ("htons: integer is not 2 bytes.\n")
 	return -1 
 
-def ntohs(num):
-	if (num.bit_length() + 7) // 8 == 2:
-		n = (num & 0xFF << 8) | (num & 0xFF00 >> 8)
-		return _random_long_to_bytes(n)
-	log ("ntohs: integer is not 2 bytes.\n")
-	return -1 
+def bytes_to_int(bytes):
+  n = 0
+  # read from bytes and add to n 
+  for b in bytes:
+    n = n * 256 + int(b)
+  # transform back to host byte order 
+  n = ((n & 0xFF) << 8) | ((n & 0xFF00) >> 8)
+  return n
