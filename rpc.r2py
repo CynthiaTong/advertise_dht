@@ -7,8 +7,8 @@ LOOKUP_CAPACITY = 14
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
 DHT_MAX_LOOKUPS = 1024 # why?
 DHT_EVENT_LOOKUPS_DONE = 3 
-BUF_SIZE = 64 #BYTES 
-LARGE_BUF_SIZE = 256 
+BUF_SIZE = 512 #BYTES 
+LARGE_BUF_SIZE = 2048 
 # Question: my_v ??
 
 class RPC:
@@ -44,10 +44,10 @@ class RPC:
 
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
-					(self.id, info_hash, htons(port), token_len, token, tid_len, tid))
-		# if len(buf) <= BUF_SIZE:
-		log (buf, "\n")
-		return buf # send 
+					(self.id, info_hash, port, token_len, token, tid_len, tid))
+		if len(buf) <= BUF_SIZE:
+			log (buf, "\n")
+			return buf # send 
 
 	"""
 		REPLY METHODS 
@@ -63,14 +63,14 @@ class RPC:
 		nodes_str = ''.join(nodes_list)
 		nodes_len = len(nodes_list) * 6 
 		log (nodes_list, "\t", nodes_str,"\n")
-		log (len(nodes_str), "\t", nodes_len, "\n")
+		# log (len(nodes_str), "\t", nodes_len, "\n")
 		# retrieve peers with target_id_str from storage  
 		peers_list = self.storage.retrieve(target_id_str)
 		# if peers_list:
 		# 	for p in peers_list:
 		# 		log (p, "\n")
 		# 	log ("---------\n")
-		self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
+		return self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
 	def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
 		buf = "d1:rd2:id20:%s" % self.id 
@@ -84,8 +84,8 @@ class RPC:
 			buf += "6:valuesl"
 			for p in peers_list:
 				# !! port needs to be big endian 
-				buf += "%d:%s%s" % (6, ip_to_packed(p.ip), str(htons(p.port)))
-				log (list(ip_to_packed(p.ip)+str(htons(p.port))), "\n")
+				buf += "%d:%s%s" % (6, ip_as_bytes(p.ip), str(htons(p.port)))
+				log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
 			buf += "e"
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
@@ -117,8 +117,9 @@ class RPC:
 	def parse_message(self, buf, tid_len=4, token_len=16, nodes_len=8, values_len=256): 
 		# change string.find to a more efficient method??
 		buf_len = len(buf)
-		tid = sender_id = info_hash = target = token = nodes = ""
-		values = ""
+		tid = sender_id = info_hash = target = token = ""
+		nodes = list()
+		values = list()
 		port = 0 
 
 		# parse tid if it exists and adheres to our rule 
@@ -199,8 +200,11 @@ class RPC:
 			l = int(l_str)
 			if (0 < l <= nodes_len and buf[q] == ":" and 
 					self.length_check(p+7, nodes_len, buf_len)):
-				nodes = buf[q+1:q+1+l]
-				nodes_len = l 
+				k = q+1
+				while not (buf[k] == "5" and buf[k+1] == ":"):
+					nodes.append(ord(buf[k]))
+					k += 1 
+				nodes_len = len(nodes)
 				log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
 			else:
 				nodes_len = 0 
@@ -221,14 +225,17 @@ class RPC:
 					l = int(l_str)
 				if q < buf_len and buf[q] == ":":
 					if l == 6:
-						values += buf[q+1:q+1+l]
-						q += 1+l
+						k = q+1
+						while not ((buf[k] == "6" and buf[k+1] == ":") or buf[k] == "e"):
+							values.append(ord(buf[k]))
+							k += 1 
+						q = k
 					else:
 						log ("Received weird value -- %d bytes.\n" % l )
 				else:
 					break 
 			if q < buf_len and buf[q] == "e":
-				values_len = (q - (p+9)) * 3/4
+				values_len = len(values)
 				log ("values(len): ", values, " (", values_len, ") \n")
 			else:
 				log ("Unexpected end for values.\n")
