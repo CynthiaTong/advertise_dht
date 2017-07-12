@@ -85,7 +85,7 @@ class RPC:
 			for p in peers_list:
 				# !! port needs to be big endian 
 				buf += "%d:%s%s" % (6, ip_to_packed(p.ip), str(htons(p.port)))
-				log (ip_to_packed(p.ip), "\n")
+				log (list(ip_to_packed(p.ip)+str(htons(p.port))), "\n")
 			buf += "e"
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
@@ -129,17 +129,17 @@ class RPC:
 					self.length_check(l+2, tid_len, buf_len)):
 				tid = buf[l+2:2*l+2]
 				tid_len = l 
+				log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
 			else:
 				tid_len = 0 
 		else:
 			tid_len = 0 
 
-	#!!!random bytes does not return 20 bytes ???
 		p = buf.find("2:id20:")
 		if p > -1:
 			if self.length_check(p+7, 20, buf_len):
 				sender_id = buf[p+7:p+7+20]
-				log (sender_id, "\n")
+				log ("sender id: ", sender_id, "\n")
 			else:
 				sender_id = 0 
 
@@ -147,6 +147,7 @@ class RPC:
 		if p > -1:
 			if self.length_check(p+14, 20, buf_len):
 				info_hash = buf[p+14:p+14+20]
+				log ("infohash: ", info_hash, "\n")
 			else:
 				info_hash = 0 
 
@@ -159,14 +160,14 @@ class RPC:
 				q += 1 
 			n = int(n_str)
 			if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
-				# log (n, "\n")
+				log ("port: ", n, "\n")
 				port = n
 
 		p = buf.find("6:target20:")
 		if p > -1:
 			if self.length_check(p+11, 20, buf_len):
 				target = buf[p+11:p+11+20]
-				log(target, "\n")
+				log("target: ", target, "\n")
 			else:
 				target = 0 
 
@@ -182,7 +183,7 @@ class RPC:
 					self.length_check(p+7, token_len, buf_len)):
 				token = buf[q+1:q+1+l]
 				token_len = l 
-				# log (token, "\t", token_len, "\n")
+				log ("token(token_len): ", token, " (", token_len, ") \n")
 			else: 
 				token_len = 0 
 		else:
@@ -200,6 +201,7 @@ class RPC:
 					self.length_check(p+7, nodes_len, buf_len)):
 				nodes = buf[q+1:q+1+l]
 				nodes_len = l 
+				log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
 			else:
 				nodes_len = 0 
 		else:
@@ -210,21 +212,24 @@ class RPC:
 		if p > -1:
 			q = p+9 
 			while True: 
-				l_str = ""			
+				l_str = ""
+				l = 0 
 				while q < buf_len and buf[q].isdigit():
 					l_str += buf[q]
 					q += 1 
-				l = int(l_str)
-				log (l, "\n")
-				if buf[q] and buf[q] == ":" and l == 6:
-					values += buf[q+1:q+1+l]
-					q += 1+l
+				if l_str:
+					l = int(l_str)
+				if q < buf_len and buf[q] == ":":
+					if l == 6:
+						values += buf[q+1:q+1+l]
+						q += 1+l
+					else:
+						log ("Received weird value -- %d bytes.\n" % l )
 				else:
-					log ("Received weird value -- %d bytes.\n" % l )
 					break 
-			log ("Values: ", values, "\n")
-			if buf[q] and buf[q] == "e":
-				values_len = q - (p+9)
+			if q < buf_len and buf[q] == "e":
+				values_len = (q - (p+9)) * 3/4
+				log ("values(len): ", values, " (", values_len, ") \n")
 			else:
 				log ("Unexpected end for values.\n")
 		else:
