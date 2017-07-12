@@ -62,7 +62,7 @@ class RPC:
 		target_id_long = string_to_long(target_id_str, 20)
 		nodes_list = self.router.get_closest_good_nodes(target_id_long)
 		nodes_str = ''.join(nodes_list)
-		nodes_len = len(nodes_list) * 6 
+		nodes_len = len(nodes_list) * 26 
 		# log (nodes_list, "\t", nodes_str,"\n")
 		# log (len(nodes_str), "\t", nodes_len, "\n")
 		# retrieve peers with target_id_str from storage  
@@ -115,7 +115,12 @@ class RPC:
 			return False 
 		return True 
 
-	def parse_message(self, buf, tid_len=4, token_len=16, nodes_len=8, values_len=256): 
+	"""
+		For now (k = 8)
+		Max number of nodes to send: 8 
+		Max number of peers to send: 8 
+	"""
+	def parse_message(self, buf, tid_len=4, token_len=16, nodes_len=8*26, values_len=8*6): 
 		# change string.find to a more efficient method??
 		buf_len = len(buf)
 		tid = sender_id = info_hash = target = token = ""
