@@ -7,7 +7,7 @@ def get_time():
 	time_updatetime(timeport)
 	return time_gettime()
 
-# 4-byte (or less?) transaction id string  
+# 4-byte transaction id string  
 def make_tid(prefix, sequence):
 	output = ""
 	for n in prefix:
@@ -21,9 +21,10 @@ def make_tid(prefix, sequence):
 # return the sequence taken from tid if matches, else return -1 
 def tid_match(tid, prefix):
 	if tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
-		return tid[2]
+		return tid[2:]
 	else:
 		return -1 
+
 
 ROTATE_SECRET_INTERVAL = 5 * 60
 TOKEN_SIZE = 8
@@ -40,7 +41,7 @@ def rotate_secret(secret=None):
 
 	return (old_secret, secret, rotate_secret_time)
 
-# 20 byte token 
+# 16 byte token 
 def make_token(ip, secret):
 	return sha_hash(str(ip) + secret)
 
@@ -76,11 +77,22 @@ def xor_distance(num1, num2):
 def compare_distance(target, num1, num2):
 	return xor_distance(target, num1) - xor_distance(target, num2)
 
-def ip_to_packed(ip):
-	hex_list = list()
-	for x in ip.split('.'):
-		hex_list.append(chr(int(x)))
-	return ''.join(hex_list)
+def ip_as_bytes(ip):
+	ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
+	return ip_as_bytes
+
 
 def htons(num):
-	return (num & 0xFF << 8) | (num & 0xFF00 >> 8)
+	# if integer is 2-byte 
+	if (num.bit_length() + 7) // 8 == 2:
+		n = (num & 0xFF << 8) | (num & 0xFF00 >> 8)
+		return _random_long_to_bytes(n)
+	log ("htons: integer is not 2 bytes.\n")
+	return -1 
+
+def ntohs(num):
+	if (num.bit_length() + 7) // 8 == 2:
+		n = (num & 0xFF << 8) | (num & 0xFF00 >> 8)
+		return _random_long_to_bytes(n)
+	log ("ntohs: integer is not 2 bytes.\n")
+	return -1 
