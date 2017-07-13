@@ -2,9 +2,10 @@ dy_import_module_symbols("time.r2py")
 dy_import_module_symbols("sha.r2py")
 dy_import_module_symbols("random.r2py")
 
+timeport = list(getresources()[0]["connport"])[0]
+time_updatetime(timeport)
+
 def get_time():
-	timeport = list(getresources()[0]["connport"])[0]
-	time_updatetime(timeport)
 	return time_gettime()
 
 # 4-byte transaction id string  
@@ -98,3 +99,170 @@ def bytes_to_int(bytes):
   # transform back to host byte order 
   n = ((n & 0xFF) << 8) | ((n & 0xFF00) >> 8)
   return n
+
+
+def length_check(index, length, buf_len):
+	if index + length > buf_len:
+		log ("Failed length check.\n")
+		return False 
+	return True 
+
+
+"""
+	For now (k = 8)
+	Max number of nodes to send: 8 
+	Max number of peers to send: 8 
+"""
+def parse_message(buf, tid_len=4, token_len=16, nodes_len=8*26, values_len=8*6): 
+	# change string.find to a more efficient method??
+	buf_len = len(buf)
+	sender_id = info_hash = target = token = ""
+	tid = ""
+	nodes = list()
+	values = list()
+	port = 0 
+
+	# parse tid if it exists and adheres to our rule 
+	p = buf.find("1:t")
+	if p > -1:
+		l = int(buf[p+3])
+		if 0 < l <= tid_len and buf[p+4] == ":":
+			k = p+5
+			while k < buf_len and not (buf[k] == "1" and buf[k+1] == ":"):
+				tid += buf[k]
+				k += 1 
+			tid_len = len(tid)
+			log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
+		else:
+			tid_len = 0 
+	else:
+		tid_len = 0 
+
+	p = buf.find("2:id20:")
+	if p > -1:
+		if length_check(p+7, 20, buf_len):
+			sender_id = buf[p+7:p+7+20]
+			log ("sender id: ", sender_id, "\n")
+		else:
+			sender_id = 0 
+
+	p = buf.find("9:info_hash20:")
+	if p > -1:
+		if length_check(p+14, 20, buf_len):
+			info_hash = buf[p+14:p+14+20]
+			log ("infohash: ", info_hash, "\n")
+		else:
+			info_hash = 0 
+
+	p = buf.find("porti")
+	if p > -1:
+		n_str = ""
+		q = p+5
+		while q < buf_len and buf[q].isdigit():
+			n_str += buf[q]
+			q += 1 
+		n = int(n_str)
+		if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
+			log ("port: ", n, "\n")
+			port = n
+
+	p = buf.find("6:target20:")
+	if p > -1:
+		if length_check(p+11, 20, buf_len):
+			target = buf[p+11:p+11+20]
+			log("target: ", target, "\n")
+		else:
+			target = 0 
+
+	p = buf.find("5:token")
+	if p > -1:
+		l_str = ""
+		q = p+7 
+		while q < buf_len and buf[q].isdigit():
+			l_str += buf[q]
+			q += 1 
+		l = int(l_str)
+		if (0 < l <= token_len and buf[q] == ":" and length_check(p+7, token_len, buf_len)):
+			token = buf[q+1:q+1+l]
+			token_len = l 
+			log ("token(token_len): ", token, " (", token_len, ") \n")
+		else: 
+			token_len = 0 
+	else:
+		token_len = 0
+
+	p = buf.find("5:nodes")
+	if p > -1:
+		l_str = ""
+		q = p+7 
+		while q < buf_len and buf[q].isdigit():
+			l_str += buf[q]
+			q += 1 
+		l = int(l_str)
+		if 0 < l <= nodes_len and buf[q] == ":":
+			k = q+1
+			while not (buf[k] == "5" and buf[k+1] == ":"):
+				nodes.append(ord(buf[k]))
+				k += 1 
+			nodes_len = len(nodes)
+			log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
+		else:
+			nodes_len = 0 
+	else:
+		nodes_len = 0  
+
+	# parse values 
+	p = buf.find("6:valuesl")
+	if p > -1:
+		q = p+9 
+		while True: 
+			l_str = ""
+			l = 0 
+			while q < buf_len and buf[q].isdigit():
+				l_str += buf[q]
+				q += 1 
+			if l_str:
+				l = int(l_str)
+			if q < buf_len and buf[q] == ":":
+				if l == 6:
+					k = q+1
+					while not ((buf[k] == "6" and buf[k+1] == ":") or buf[k] == "e"):
+						values.append(ord(buf[k]))
+						k += 1 
+					q = k
+				else:
+					log ("Received weird value -- %d bytes.\n" % l )
+			else:
+				break 
+		if q < buf_len and buf[q] == "e":
+			values_len = len(values)
+			log ("values(len): ", values, " (", values_len, ") \n")
+		else:
+			log ("Unexpected end for values.\n")
+	else:
+		values_len = 0 
+
+	msg_type = -1 
+
+	if buf.find("1:y1:r") > -1:
+		msg_type = "REPLY"
+	elif buf.find("1:y1:e") > -1:
+		msg_type = "ERROR"		
+	elif buf.find("1:y1:q") == -1:
+		msg_type = -1 
+	elif buf.find("1:q4:ping") > -1:
+		msg_type = "PING"
+	elif buf.find("1:q9:find_node") > -1:
+		msg_type = "FIND_NODE"
+	elif buf.find("1:q9:get_peers") > -1:
+		msg_type = "GET_PEERS"
+	elif buf.find("1:q13:announce_peer") > -1:
+		msg_type = "ANNOUNCE_PEER"
+	
+	log (msg_type, "\n")
+
+	if msg_type == -1:
+		return -1 
+	else:
+		return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
+						token, token_len, nodes, nodes_len, values, values_len)
