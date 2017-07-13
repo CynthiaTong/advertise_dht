@@ -6,12 +6,12 @@ dy_import_module_symbols("util.r2py")
 
 class DHT_Lookup:
 
-	def __init__(self, string_id, routing_table, storage):
+	def __init__(self, string_id, routing_table=None, rpc=None):
 		self.lookups = list()
 		self.lookup_id = make_lid()
 		self.lookup_time = 0 
 		self.router = routing_table
-		self.rpc = RPC(string_id, routing_table, storage)
+		self.rpc = rpc 
 
 	def dht_lookup(self, target_id, port, callback):
 		new_lookup = True 
@@ -23,7 +23,7 @@ class DHT_Lookup:
 				new_lookup = False 
 				for n in l.get_nodes():
 					# discard dubious node 
-					if n.pinged >= 3 or n.last_replied < get_time() - 120 * 60:
+					if n.pinged >= 3 or n.last_replied < getruntime() - 120 * 60:
 						l.remove(n)
 				# get some new lookup nodes 
 				l = self.router.get_lookup_nodes(l, target_id)
@@ -39,7 +39,7 @@ class DHT_Lookup:
 				if l.done and (oldest == None or l.step_time < oldest.step_time):
 					oldest = l 
 			# if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
-			if oldest and oldest.step_time < get_time() - DHT_LOOKUP_EXPIRE_TIME:
+			if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
 				index = self.lookups.index(oldest) 
 				self.lookups[index] = newest
 			else:
@@ -50,7 +50,7 @@ class DHT_Lookup:
 			self.lookup_step(newest, callback)
 			# log (newest.get_all_ids(), "\n")
 		# update lookup_time 
-		self.lookup_time = get_time()
+		self.lookup_time = getruntime()
 		# callback(DHT_EVENT_LOOKUP_DONE, target_id)
 
 	def lookup_step(self, lookup, callback):
@@ -77,19 +77,19 @@ class DHT_Lookup:
 						tid = make_tid("ap", lookup.tid)
 						self.rpc.announce_peer(n.ip, n.port, tid, 4, lookup.target_id, n.token, len(n.token))
 						n.pinged += 1 
-						n.last_req = get_time()
+						n.last_req = getruntime()
 						# find node with this id in routing table 
 						router_node = self.router.find_node(n.long_id)
 						if router_node:
 							self.router.pinged(router_node)
 				if all_acked:
 					finished = True 
-			lookup.step_time = get_time()
+			lookup.step_time = getruntime()
 			return 
 
 		# if not all replied 
 		# ignore too frequent lookups 
-		if lookup.step_time > get_time() - 15:
+		if lookup.step_time > getruntime() - 15:
 			return 
 
 		# send alpha (3) get_peers requests 
@@ -101,19 +101,19 @@ class DHT_Lookup:
 
 		if finished:
 			lookup.done = 1 
-			lookup.step_time = get_time()
+			lookup.step_time = getruntime()
 			if callback:
 				callback(DHT_EVENT_LOOKUP_DONE, lookup.target_id)
 
-		lookup.step_time = get_time()
+		lookup.step_time = getruntime()
 
 	def lookup_get_peers(self, lookup, node):
 		if not node:
 			for n in lookup.get_nodes():
-				if n.pinged < 3 and not n.replied and n.last_req < get_time() - 15:
+				if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
 					node = n 
 
-		if not node or node.pinged >=3 or node.last_req > get_time() - 15:
+		if not node or node.pinged >=3 or node.last_req > getruntime() - 15:
 			return False 
 
 		log ("Sending get_peers.\n")
@@ -121,7 +121,7 @@ class DHT_Lookup:
 		# send get_peers 
 		self.rpc.get_peers(node.ip, node.port, tid, 4, lookup.target_id)
 		node.pinged += 1 
-		node.last_req = get_time()
+		node.last_req = getruntime()
 		router_node = self.router.find_node(node.long_id)
 		if router_node:
 			self.router.pinged(router_node)
@@ -163,7 +163,7 @@ class Lookup:
 				# found 
 				if replied:
 					n.replied = 1 
-					n.last_replied = get_time()
+					n.last_replied = getruntime()
 					n.last_req = 0 
 					n.pinged = 0 
 				return 

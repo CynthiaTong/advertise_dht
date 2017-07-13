@@ -13,7 +13,7 @@ class Bucket:
 		self.update_last_visited()
 
 	def update_last_visited(self):
-		self.last_visited = get_time()
+		self.last_visited = getruntime()
 
 	# min: inclusive, max: exclusive 
 	def in_range(self, *args):
@@ -48,11 +48,11 @@ class Bucket:
 	# update node's time info based on the message type (req or res)
 	def update_time_info(self, node, message_type):
 		if message_type:
-			node.last_queried = get_time()
+			node.last_queried = getruntime()
 		else:
 			node.pinged = 0 
 			node.replied = 1 
-			node.last_replied = get_time()
+			node.last_replied = getruntime()
 
 	def remove_node(self, node):
 

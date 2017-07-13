@@ -1,4 +1,4 @@
-dy_import_module_symbols("lookup.r2py")
+y_import_module_symbols("lookup.r2py")
 dy_import_module_symbols("routing.r2py")
 dy_import_module_symbols("storage.r2py")
 dy_import_module_symbols("util.r2py")
@@ -59,7 +59,7 @@ class RPC:
 			return buf 
 
 	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token, token_len):
-		target_id_long = string_to_long(target_id_str, 20)
+		target_id_long = string_to_long(target_id_str)
 		nodes_list = self.router.get_closest_good_nodes(target_id_long)
 		nodes_str = ''.join(nodes_list)
 		nodes_len = len(nodes_list) * 26 

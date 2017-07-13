@@ -7,13 +7,13 @@ dy_import_module_symbols("random.r2py")
 
 class RoutingTable:
 
-	def __init__(self, string_id, ksize, storage):
+	def __init__(self, string_id, ksize, rpc):
 		self.id = string_id
-		self.long_id = string_to_long(string_id, 20)
+		self.long_id = string_to_long(string_id)
 		self.ksize = ksize 
 		self.expire_buckets_time = 0  
 		self.initial_bucket()
-		self.rpc = RPC(string_id, self, storage)
+		self.rpc = rpc 
 
 	def initial_bucket(self):
 		self.buckets = [Bucket(0, 2**160, self.ksize)]
@@ -39,7 +39,7 @@ class RoutingTable:
 					b.remove_node(n)
 					# ping a replacement node 
 					self.ping_replacement(b)
-					self.expire_buckets_time = get_time() + 120 + random_int_below(240)
+					self.expire_buckets_time = getruntime() + 120 + random_int_below(240)
 
 	"""
 		not necessarily "new" contact 
@@ -77,13 +77,13 @@ class RoutingTable:
 		else: 
 			for n in bucket.nodes:
 				# find a dubious node to Ping 
-				if n.pinged >= 3 and n.last_pinged < get_time() - 15:
+				if n.pinged >= 3 and n.last_pinged < getruntime() - 15:
 					log ("Node ", n.long_id, " gets pinged.\n")
 					tid = make_tid("pn", 0)
 					# Ping that node 
 					self.rpc.ping(n.ip, n.port, tid, 4)
 					n.pinged += 1 
-					n.last_pinged = get_time()
+					n.last_pinged = getruntime()
 					break 
 			# add to bucket's replacement list if there's space left 
 			if len(bucket.replacements) < self.ksize:
@@ -91,7 +91,7 @@ class RoutingTable:
 
 	# get buckets that haven't been queried in the last hour (to refresh)
 	def get_unvisited_buckets(self):
-		return [b for b in self.buckets if get_time() - b.last_visited >= 3600]
+		return [b for b in self.buckets if getruntime() - b.last_visited >= 3600]
 
 	def find_node(self, target_id):
 		i, bucket = self.find_bucket(target_id)
@@ -120,7 +120,7 @@ class RoutingTable:
 			# if node info is already in nodes_list, return 
 			if node.id == i_id:
 				return nodes_list 
-			if compare_distance(target_id, node.long_id, string_to_long(i_id, 20)) < 0:
+			if compare_distance(target_id, node.long_id, string_to_long(i_id)) < 0:
 				break 
 			i += 1 
 		# if list is full, return 
@@ -153,9 +153,6 @@ class RoutingTable:
 	# Might just need to scan the whole routing table to find STRICTLY closest 
 	# (above get_closest_nodes function)
 	def get_lookup_nodes(self, lookup, target_id):
-
-		if not isinstance(lookup, Lookup):
-			raise TypeError("get_lookup_nodes did not receive Lookup instance.")
 
 		# find the bucket and add its nodes 
 		current_index, current_bucket = self.find_bucket(target_id)
@@ -190,7 +187,7 @@ class RoutingTable:
 
 	def pinged(self, node, bucket=None):
 		node.pinged += 1 
-		node.last_pinged = get_time()
+		node.last_pinged = getruntime()
 		if node.pinged >= 3:
 			if bucket:
 				self.ping_replacement(bucket)

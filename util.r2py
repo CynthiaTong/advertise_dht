@@ -59,9 +59,8 @@ LID_BIT_SIZE = 16
 def make_lid():
 	return random_nbit_int(LID_BIT_SIZE)
 
-# Converts some number of random bytes into a number
-# Treats random data as an unsigned long.
-def string_to_long(data, bytes):
+# Converts 20 bytes into a long number
+def string_to_long(data):
   # Store the number
   num = 0L
   offset = 0
