@@ -107,7 +107,7 @@ class DHT_Lookup:
 
 		lookup.step_time = getruntime()
 
-	def lookup_get_peers(self, lookup, node):
+	def lookup_get_peers(self, lookup, node=None):
 		if not node:
 			for n in lookup.get_nodes():
 				if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
@@ -127,6 +127,11 @@ class DHT_Lookup:
 			self.router.pinged(router_node)
 		return True 
 
+	def find_lookup_by_tid(tid):
+		for l in self.lookups:
+			if l.tid == tid:
+				return l 
+		return None 
 
 def callback(EVENT, id, data=None, data_len=0):
 	log (EVENT, "\t", id, "\n")
@@ -148,9 +153,9 @@ class Lookup:
 	# if new contact's dist to target is less than the furthest in the list, 
 	# insert it and discard the old furthest if necessary (exceed capacity). 
 	# Otherwise, if the contact already exist or is further than the furthest, discard it. 
-	def insert(self, node, replied, token):
+	def insert(self, id, ip, port, replied=0, token=None, token_len=0):
 
-		lookup_node = Lookup_Node(node.id, node.ip, node.port, replied, token)
+		lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
 
 		if len(self.list) == 0:
 			self.list.append(lookup_node)
@@ -166,6 +171,13 @@ class Lookup:
 					n.last_replied = getruntime()
 					n.last_req = 0 
 					n.pinged = 0 
+
+					if token:
+						if token_len >= 40:
+							log ("Overlong token.\n")
+						else:
+							n.token = token 
+							n.token_len = token_len 
 				return 
 			elif comparison > 0:
 				continue 
@@ -208,9 +220,10 @@ class Lookup:
 		return len(self.list) >= self.capacity
 
 class Lookup_Node(Node):
-	def __init__(self, id, ip, port, replied, token):
+	def __init__(self, id, ip, port, replied, token, token_len):
 		Node.__init__(self, id, ip, port)
 		self.replied = replied 
-		self.token = token 
 		self.last_req = 0 
 		self.acked = 0 
+		self.token = token 
+		self.token_len = token_len
