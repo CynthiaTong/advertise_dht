@@ -94,8 +94,8 @@ class DHT:
 									ip_strs = list()
 									for x in n[20:24]:
 										ip_strs.append(str(x))
-
 									n_ip = ".".join(ip_strs)
+
 									n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
 									i += 26 
 									log (n_id, "\t", n_ip, ": ", n_port, "\n")
@@ -110,8 +110,21 @@ class DHT:
 
 					if values_len > 0 and lids[0]:
 						log ("Got %d values!\n" % (values_len/6))
+						filtered_values = list()
+						i = 0 
+						while i < values_len:
+							v = values[i:i+6]
+							ip_strs = list()
+							for x in v[0:4]:
+								ip_strs.append(str(x))
+							v_ip = ".".join(ip_strs)
+
+							v_port = bytes_to_int(v[4:])  # convert port bytes back to an integer
+							i += 6
+							filtered_values.append((v_ip, v_port))
+							log (v_ip, ": ", v_port, "\n")
 						if callback:
-							return callback(DHT_EVENT_VALUES, lookup.target_id, values, values_len)
+							return callback(DHT_EVENT_VALUES, lookup.target_id, filtered_values, len(filtered_values))
 
 				elif tid_match(tid, "ap"):	
 					log ("Got reply to announce_peer!\n")
