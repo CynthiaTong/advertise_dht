@@ -45,6 +45,10 @@ class DHT:
 			(msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
 			nodes, nodes_len, values, values_len) = msg 
 
+			nodes_len = int(nodes_len)
+			values_len = int(values_len)
+			token_len= int(token_len)
+
 			if msg_type == "ERROR" or string_to_long(sender_id) == 0:
 				log ("Faulty message - unparseable: \n", buf, "\n")
 				return self.periodic()
@@ -82,10 +86,19 @@ class DHT:
 								i = 0 
 								while i < nodes_len:
 									n = nodes[i:i+26]
-									n_id = n[:20]
-									n_ip = n[20:24]
-									n_port = n[24:]
+									# convert id, ip and port to host order and readable format 
+									n_id = ""
+									for x in n[:20]:
+										n_id += chr(int(x))
+
+									ip_strs = list()
+									for x in n[20:24]:
+										ip_strs.append(str(x))
+
+									n_ip = ".".join(ip_strs)
+									n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
 									i += 26 
+									log (n_id, "\t", n_ip, ": ", n_port, "\n")
 									if n_id == self.id:
 										continue;
 									self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
@@ -95,8 +108,8 @@ class DHT:
 								self.lookups.lookup_get_peers(lookup)
 								lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
 
-					if values_len > 0 and lid[0]:
-						log ("Got %d values!\n" % values_len/6)
+					if values_len > 0 and lids[0]:
+						log ("Got %d values!\n" % (values_len/6))
 						if callback:
 							return callback(DHT_EVENT_VALUES, lookup.target_id, values, values_len)
 
@@ -130,7 +143,7 @@ class DHT:
 
 			elif msg_type == "FIND_NODE":
 				log ("Find node!\n")
-				self.rounter.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
 				log ("Sending closest node to find_node req.\n")
 				self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, target)
 
