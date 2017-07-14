@@ -9,21 +9,25 @@ DHT_EVENT_VALUES = 1
 DHT_EVENT_LOOKUP_DONE = 2
 
 TOKEN_SIZE = 16 
-
+K_SIZE = 8 
 
 class DHT:
 
 	def __init__(self, s, dht_id): # s - whether we have a socket or not (int, -1/else)
 		self.id = dht_id
 		self.long_id = string_to_long(self.id)
-		self.lookups = None 
-		self.storage = None 
-		self.router = None 
-		self.dht_lookup = DHT_Lookup(self.id)
+		
+		self.rpc = RPC(self.id)
+		self.router = Routing_Table(self.id, K_SIZE, self.rpc) 
+		self.rpc.router = self.router
+
+		self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
+		self.storage = Storage(self.id) 
 		self.dht_socket = s 
 		self.secret_package = rotate_secret() 
+		self.refresh_buckets_time = getruntime() + random_int_below(3)
 
-		# bucket_grow_time & confirm_nodes_time for maintenance? 
+		# bucket_grow_time for mybucket maintenance? 
 		# token_bucket_time for rate control?
 
 	def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
@@ -157,7 +161,7 @@ class DHT:
 				if port == 0:
 					log ("Got announce_peer with port 0\n")
 					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with forbidden port number (0).")		
+															203, "Announce_peer with forbidden port number.")		
 				if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
 					log ("Got announce_peer with invalid token\n")
 					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
@@ -175,3 +179,46 @@ class DHT:
 
 	def periodic(self):
 		log ("do periodic stuff.\n")
+		# if now > rotate_secret_time 
+		if getruntime() >= self.secret_package[2]: 
+			rotate_secret(self.secret_package[1])
+
+		if getruntime() >= self.router.expire_stuff_time:
+			self.router.expire_buckets()
+			self.storage.expire_storage()
+			self.lookups.expire_lookups()
+
+		if 0 < self.lookups.lookup_time <= getruntime():
+			# execute the lookups 
+			for l in self.lookups:
+				if not l.done and l.step_time <= getruntime() - 5:
+					self.lookups.lookup_step(l, callback)
+
+			# increase lookup_time for next rounds of steps 
+			self.lookups.lookup_time = 0 
+			for l in self.lookups:
+				if not l.done:
+					l_time = l.step_time + 15 + random_int_below(10)
+					if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
+						self.lookups.lookup_time = l_time
+
+		if self.refresh_buckets_time <= getruntime():
+			refreshed = self.router.refresh_buckets()
+			if refreshed:
+				self.refresh_buckets_time = getruntime() + 5 + random_int_below(20)  	# next refresh in < 25 seconds 
+			else:
+				self.refresh_buckets_time = getruntime() + 60 + random_int_below(120)   # next refresh in 1 - 3 min 
+
+		refresh_interval = self.refresh_buckets_time - getruntime()
+		if interval > 0:
+			to_sleep = refresh_interval
+		else:
+			to_sleep = 0 
+
+		if self.lookups.lookup_time > 0:
+			lookup_interval = self.lookups.lookup_time - getruntime()
+			if lookup_interval > 0:
+				to_sleep = lookup_interval
+			else:
+				to_sleep = 0 
+		return True 
