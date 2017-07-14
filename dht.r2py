@@ -11,14 +11,15 @@ DHT_EVENT_LOOKUP_DONE = 2
 TOKEN_SIZE = 16 
 K_SIZE = 8 
 
+
 class DHT:
 
 	def __init__(self, s, dht_id): # s - whether we have a socket or not (int, -1/else)
 		self.id = dht_id
 		self.long_id = string_to_long(self.id)
-		
+
 		self.rpc = RPC(self.id)
-		self.router = Routing_Table(self.id, K_SIZE, self.rpc) 
+		self.router = RoutingTable(self.id, K_SIZE, self.rpc) 
 		self.rpc.router = self.router
 
 		self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
@@ -123,7 +124,7 @@ class DHT:
 
 			elif msg_type == "PING":
 				log ("Ping!\n")
-				self.rounter.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
 				log ("Sending pong.\n")
 				self.rpc.pong(source_ip, source_port, tid, tid_len)
 
@@ -153,19 +154,20 @@ class DHT:
 
 			elif msg_type == "ANNOUNCE_PEER":
 				log ("Announce peer!\n")
-				self.rounter.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
 				if string_to_long(info_hash) == 0:
 					log ("Got announce_peer with no info_hash\n")
-					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
 															203, "Announce_peer with no infohash.")		
 				if port == 0:
 					log ("Got announce_peer with port 0\n")
-					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
 															203, "Announce_peer with forbidden port number.")		
 				if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
 					log ("Got announce_peer with invalid token\n")
-					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with invalid token.")		
+					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+															203, "Announce_peer with invalid token.")	
+
 				self.storage.store(sender_id, source_ip, source_port)
 				log ("Sending peer announced.\n")
 				self.rpc.peer_announced(source_ip, source_port, tid, tid_len)
@@ -210,7 +212,7 @@ class DHT:
 				self.refresh_buckets_time = getruntime() + 60 + random_int_below(120)   # next refresh in 1 - 3 min 
 
 		refresh_interval = self.refresh_buckets_time - getruntime()
-		if interval > 0:
+		if refresh_interval > 0:
 			to_sleep = refresh_interval
 		else:
 			to_sleep = 0 
