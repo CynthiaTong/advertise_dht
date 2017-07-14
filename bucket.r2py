@@ -10,10 +10,12 @@ class Bucket:
 		self.ksize = ksize
 		self.nodes = list()
 		self.replacements = list() #should be a stack (set)
-		self.update_last_visited()
+		# self.update_last_visited()
+		self.last_changed = getruntime()
 
-	def update_last_visited(self):
-		self.last_visited = getruntime()
+	# this is not specified in the bittorrent protocol (although appears in the paper)
+	# def update_last_visited(self):
+	# 	self.last_visited = getruntime()
 
 	# min: inclusive, max: exclusive 
 	def in_range(self, *args):
@@ -33,7 +35,8 @@ class Bucket:
 		# New node and bucket full 
 		else:
 			return False
-
+		# node added, update bucket last_changed 
+		self.last_changed = getruntime()
 		self.update_time_info(node, message_type)
 		# log ("NEW NODE ", node.long_id, " ", node.pinged, " ", node.last_queried, " ", node.last_replied ,"\n")
 		return True
@@ -53,6 +56,8 @@ class Bucket:
 			node.pinged = 0 
 			node.replied = 1 
 			node.last_replied = getruntime()
+			# node replied, update bucket last_changed 	
+			self.last_changed = getruntime()
 
 	def remove_node(self, node):
 
@@ -65,6 +70,8 @@ class Bucket:
 			replacement_node = self.replacements.pop()
 			if replacement_node.good_node():
 				self.nodes.append(replacement_node)
+				# node replaced, update bucket last_changed 
+				self.last_changed = getruntime()
 				break 
 		return True
 
@@ -90,8 +97,8 @@ class Bucket:
 
 	# get all nodes (for lookups)
 	def get_nodes(self):
-		# bucket is contacted for lookup, update last_visited  
-		self.update_last_visited()
+		# # bucket is contacted for lookup, update last_visited  
+		# self.update_last_visited()
 		return self.nodes
 
 	def node_count(self):
