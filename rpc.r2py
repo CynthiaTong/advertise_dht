@@ -42,9 +42,9 @@ class RPC:
 			log (buf, "\n")
 			return buf 
 
-	def announce_peer(self, ip, port, tid, tid_len, info_hash, token, token_len):
+	def announce_peer(self, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
-					(self.id, info_hash, port, token_len, token, tid_len, tid))
+					(self.id, info_hash, lookup_port, token_len, token, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
 			return buf # send 

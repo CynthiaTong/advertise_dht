@@ -4,9 +4,11 @@ dy_import_module_symbols("rpc.r2py")
 dy_import_module_symbols("util.r2py")
 
 
+DHT_SEARCH_EXPIRE_TIME = 62 * 60 
+
 class DHT_Lookup:
 
-	def __init__(self, string_id, routing_table=None, rpc=None):
+	def __init__(self, string_id, routing_table, rpc):
 		self.lookups = list()
 		self.lookup_id = make_lid()
 		self.lookup_time = 0 
@@ -75,7 +77,7 @@ class DHT_Lookup:
 						all_acked = False 
 						log ("Sending announce peer. \n")
 						tid = make_tid("ap", lookup.tid)
-						self.rpc.announce_peer(n.ip, n.port, tid, 4, lookup.target_id, n.token, len(n.token))
+						self.rpc.announce_peer(n.ip, n.port, tid, 4, lookup.target_id, lookup.port, n.token, len(n.token))
 						n.pinged += 1 
 						n.last_req = getruntime()
 						# find node with this id in routing table 
@@ -103,7 +105,7 @@ class DHT_Lookup:
 			lookup.done = 1 
 			lookup.step_time = getruntime()
 			if callback:
-				callback(DHT_EVENT_LOOKUP_DONE, lookup.target_id)
+				return callback(DHT_EVENT_LOOKUP_DONE, lookup.target_id)
 
 		lookup.step_time = getruntime()
 
@@ -127,11 +129,17 @@ class DHT_Lookup:
 			self.router.pinged(router_node)
 		return True 
 
-	def find_lookup_by_tid(tid):
+	def find_lookup_by_tid(self, tid):
 		for l in self.lookups:
 			if l.tid == tid:
 				return l 
 		return None 
+
+	def expire_lookups(self):
+		for l in self.lookups:
+			if l.step_time < getruntime() - DHT_SEARCH_EXPIRE_TIME:
+				self.lookups.remove(l)
+
 
 def callback(EVENT, id, data=None, data_len=0):
 	log (EVENT, "\t", id, "\n")
@@ -219,11 +227,12 @@ class Lookup:
 	def is_full(self):
 		return len(self.list) >= self.capacity
 
-class Lookup_Node(Node):
+class Lookup_Node():
 	def __init__(self, id, ip, port, replied, token, token_len):
-		Node.__init__(self, id, ip, port)
 		self.replied = replied 
+		self.last_replied = 0 
 		self.last_req = 0 
 		self.acked = 0 
 		self.token = token 
 		self.token_len = token_len
+		self.pinged = 0 
