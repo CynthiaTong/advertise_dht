@@ -157,7 +157,7 @@ class DHT:
 				if port == 0:
 					log ("Got announce_peer with port 0\n")
 					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with forbidden port number.")		
+															203, "Announce_peer with forbidden port number (0).")		
 				if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
 					log ("Got announce_peer with invalid token\n")
 					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
