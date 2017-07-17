@@ -1,7 +1,6 @@
 ## Questions 
-   
-   - Include [Version Identifier](http://www.bittorrent.org/beps/bep_0005.html)? 
-   
+      
+   - Include additional DHT functionalities, such as [Version Identifier](http://www.bittorrent.org/beps/bep_0005.html) and nodes blacklist? 
    
    
 ## Problems
@@ -9,6 +8,6 @@
    
 ## To-dos 
 
-   - Implement main dht class 
+   - Investigate KadNode - how it bootstrap its initial network
    
-   - Implement network functions 
+   - Look at KadNode's advertise and lookup methods, also Seattle's advertise library 
