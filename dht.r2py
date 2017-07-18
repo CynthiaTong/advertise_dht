@@ -14,7 +14,7 @@ K_SIZE = 8
 
 class DHT:
 
-	def __init__(self, s, dht_id): # s - whether we have a socket or not (int, -1/else)
+	def __init__(self, dht_id):
 		self.id = dht_id
 		self.long_id = string_to_long(self.id)
 
@@ -24,7 +24,6 @@ class DHT:
 
 		self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
 		self.storage = Storage(self.id) 
-		self.dht_socket = s 
 		self.secret_package = rotate_secret() 
 		self.refresh_buckets_time = getruntime() + random_int_below(3)
 
@@ -250,3 +249,7 @@ class DHT:
 			else:
 				to_sleep = 0 
 		return True 
+
+	def ping_node(self, ip, port):
+		tid = make_tid("pn", 0)
+		return self.rpc.ping(ip, port, tid, 4)

@@ -24,13 +24,6 @@ class RoutingTable:
 		self.buckets[index] = bucket_1 
 		self.buckets.insert(index+1, bucket_2)
 
-	"""
-		Instead, have a purge bad nodes function 
-	"""
-	# def remove_contact(self, node):
-	# 	index = self.find_bucket(node)[0]
-	# 	self.buckets[index].remove_node(node)
-
 	# purge all bad nodes with pinged value >= 4 
 	def expire_buckets(self):
 		for b in self.buckets:
@@ -89,6 +82,11 @@ class RoutingTable:
 			# add to bucket's replacement list if there's space left 
 			if len(bucket.replacements) < self.ksize:
 				bucket.add_replacement(node, message_type)
+		return False 
+
+	def bootstrap_node(self, id, ip, port):
+		n = Node(id, ip, port)
+		return self.add_contact(id, ip, port, 2)
 
 	# get buckets that haven't been queried in the 10 minutes (to refresh)
 	def get_unvisited_buckets(self):

@@ -1,6 +1,5 @@
-y_import_module_symbols("lookup.r2py")
+dy_import_module_symbols("lookup.r2py")
 dy_import_module_symbols("routing.r2py")
-dy_import_module_symbols("storage.r2py")
 dy_import_module_symbols("util.r2py")
 
 LOOKUP_CAPACITY = 14 
@@ -12,27 +11,37 @@ LARGE_BUF_SIZE = 2048
 # Question: my_v ??
 
 class RPC:
-	def __init__(self, string_id, routing_table, storage):
+	def __init__(self, string_id, routing_table=None):
 		self.id = string_id 
 		self.router = routing_table
-		self.storage = storage
+
+
+	def send(self, buf, target_ip, target_port):
+		# for debugging 
+		# target_ip = "172.16.29.118"
+		# target_port = 63101
+		log ("Sending msg to %s : %d\n" % (target_ip, target_port))
+
+		ip = getmyip()
+		port = 63102 	# range: 63100, 63201
+
+		sendmessage(target_ip, target_port, buf, ip, port)
 
 	"""
 		QUERY METHODS 
 	"""
 	def ping(self, ip, port, tid, tid_len):
 		buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self.id, tid_len, tid)
-		log (buf, "\n")
 		if len(buf) <= BUF_SIZE:
-			return buf 
-			# return dht_send(buf, buf_len, 0, socket_address, address_len)
+			log (buf, "\n")
+			return self.send(buf, ip, port)
 
-	def find_node(self, tid, tid_len, target_id):
+	def find_node(self, ip, port, tid, tid_len, target_id):
 		buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s1:y1:qe" % 
 					(self.id, target_id, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
 
 	# no ipv6 support here 
 	def get_peers(self, ip, port, tid, tid_len, info_hash):	
@@ -40,14 +49,14 @@ class RPC:
 					(self.id, info_hash, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
 
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len):
 		buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
 					(self.id, info_hash, lookup_port, token_len, token, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf # send 
+			return self.send(buf, ip, port)
 
 	"""
 		REPLY METHODS 
@@ -56,21 +65,14 @@ class RPC:
 		buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
 
-	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token, token_len):
+	def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token=None, token_len=0, peers_list=None):
 		target_id_long = string_to_long(target_id_str)
 		nodes_list = self.router.get_closest_good_nodes(target_id_long)
 		nodes_str = ''.join(nodes_list)
 		nodes_len = len(nodes_list) * 26 
-		# log (nodes_list, "\t", nodes_str,"\n")
-		# log (len(nodes_str), "\t", nodes_len, "\n")
-		# retrieve peers with target_id_str from storage  
-		peers_list = self.storage.retrieve(target_id_str)
-		# if peers_list:
-		# 	for p in peers_list:
-		# 		log (p, "\n")
-		# 	log ("---------\n")
+
 		return self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
 	def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
@@ -91,13 +93,13 @@ class RPC:
 		buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
 		if len(buf) <= LARGE_BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
 
 	def peer_announced(self, ip, port, tid, tid_len):
 		buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
 
 	def send_error(self, ip, port, tid, tid_len, error_code, error_msg):
 		msg_len = len(error_msg)
@@ -106,4 +108,4 @@ class RPC:
 
 		if len(buf) <= BUF_SIZE:
 			log (buf, "\n")
-			return buf 
+			return self.send(buf, ip, port)
