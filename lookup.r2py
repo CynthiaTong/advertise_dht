@@ -8,243 +8,243 @@ DHT_SEARCH_EXPIRE_TIME = 62 * 60
 
 class DHT_Lookup:
 
-	def __init__(self, string_id, routing_table, rpc):
-		self.lookups = list()
-		self.lookup_id = make_lid()
-		self.lookup_time = 0 
-		self.router = routing_table
-		self.rpc = rpc 
+  def __init__(self, string_id, routing_table, rpc):
+    self.lookups = list()
+    self.lookup_id = make_lid()
+    self.lookup_time = 0 
+    self.router = routing_table
+    self.rpc = rpc 
 
-	def dht_lookup(self, string_id, port, callback):
-		new_lookup = True 
-		target_id = string_to_long(string_id)
+  def dht_lookup(self, string_id, port, callback):
+    new_lookup = True 
+    target_id = string_to_long(string_id)
 
-		# reusing data from an old lookup  
-		for l in self.lookups:
-			if target_id == l.target_id:
-				l.done = 0 
-				new_lookup = False 
-				for n in l.get_nodes():
-					# discard dubious node 
-					if n.pinged >= 3 or n.last_replied < getruntime() - 120 * 60:
-						l.remove(n)
-				# get some new lookup nodes 
-				l = self.router.get_lookup_nodes(l, target_id)
-				log ("old ")
-				self.lookup_step(l, callback)
-				break 
+    # reusing data from an old lookup  
+    for l in self.lookups:
+      if target_id == l.target_id:
+        l.done = 0 
+        new_lookup = False 
+        for n in l.get_nodes():
+          # discard dubious node 
+          if n.pinged >= 3 or n.last_replied < getruntime() - 120 * 60:
+            l.remove(n)
+        # get some new lookup nodes 
+        l = self.router.get_lookup_nodes(l, target_id)
+        log ("old ")
+        self.lookup_step(l, callback)
+        break 
 
-		if new_lookup:
-			self.lookup_id += 1 
-			newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY)
-			oldest = None 
-			# find the oldest lookup
-			for l in self.lookups:
-				if l.done and (oldest == None or l.step_time < oldest.step_time):
-					oldest = l 
-			# if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
-			if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
-				index = self.lookups.index(oldest) 
-				self.lookups[index] = newest
-			else:
-				self.lookups.append(newest)
+    if new_lookup:
+      self.lookup_id += 1 
+      newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY)
+      oldest = None 
+      # find the oldest lookup
+      for l in self.lookups:
+        if l.done and (oldest == None or l.step_time < oldest.step_time):
+          oldest = l 
+      # if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
+      if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
+        index = self.lookups.index(oldest) 
+        self.lookups[index] = newest
+      else:
+        self.lookups.append(newest)
 
-			newest = self.router.get_lookup_nodes(newest, target_id)
-			newest.port = port 
-			log ("new ")
-			self.lookup_step(newest, callback)
-			# log (newest.get_all_ids(), "\n")
-		# update lookup_time 
-		self.lookup_time = getruntime()
-		# callback(DHT_EVENT_LOOKUP_DONE, target_id)
+      newest = self.router.get_lookup_nodes(newest, target_id)
+      newest.port = port 
+      log ("new ")
+      self.lookup_step(newest, callback)
+      # log (newest.get_all_ids(), "\n")
+    # update lookup_time 
+    self.lookup_time = getruntime()
+    # callback(DHT_EVENT_LOOKUP_DONE, target_id)
 
-	def lookup_step(self, lookup, callback):
-		finished = False 
-		# see if we have got reply from k (8) live nodes 
-		all_replied = lookup.all_replied()
-		# if we have k live nodes 
-		if all_replied:
-			# finished for pure lookup 
-			if lookup.port == 0:
-				finished = True 
-			else: 
-				all_acked = True 
-				count = 0 
-				for n in lookup.get_nodes():
-					if n.pinged >= 3:
-						continue 
-					if n.token == None: # ?? 
-						n.acked = 1 
-					if not n.acked:
-						all_acked = False 
-						log ("Sending announce peer. \n")
-						tid = make_tid("ap", lookup.tid)
-						self.rpc.announce_peer(n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, len(n.token))
-						n.pinged += 1 
-						n.last_req = getruntime()
-						# find node with this id in routing table 
-						router_node = self.router.find_node(n.long_id)
-						if router_node:
-							self.router.pinged(router_node)
-				if all_acked:
-					finished = True 
-			lookup.step_time = getruntime()
-			return 
+  def lookup_step(self, lookup, callback):
+    finished = False 
+    # see if we have got reply from k (8) live nodes 
+    all_replied = lookup.all_replied()
+    # if we have k live nodes 
+    if all_replied:
+      # finished for pure lookup 
+      if lookup.port == 0:
+        finished = True 
+      else: 
+        all_acked = True 
+        count = 0 
+        for n in lookup.get_nodes():
+          if n.pinged >= 3:
+            continue 
+          if n.token == None: # ?? 
+            n.acked = 1 
+          if not n.acked:
+            all_acked = False 
+            log ("Sending announce peer. \n")
+            tid = make_tid("ap", lookup.tid)
+            self.rpc.announce_peer(n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, len(n.token))
+            n.pinged += 1 
+            n.last_req = getruntime()
+            # find node with this id in routing table 
+            router_node = self.router.find_node(n.long_id)
+            if router_node:
+              self.router.pinged(router_node)
+        if all_acked:
+          finished = True 
+      lookup.step_time = getruntime()
+      return 
 
-		# if not all replied 
-		# ignore too frequent lookups 
-		if lookup.step_time > getruntime() - 5:
-			return 
+    # if not all replied 
+    # ignore too frequent lookups 
+    if lookup.step_time > getruntime() - 5:
+      return 
 
-		# send alpha (3) get_peers requests 
-		send_count = 0 
-		for n in lookup.get_nodes():
-			send_count += self.lookup_get_peers(lookup, n)
-			if send_count >= 3:
-				break 
-		lookup.step_time = getruntime()
-		return
+    # send alpha (3) get_peers requests 
+    send_count = 0 
+    for n in lookup.get_nodes():
+      send_count += self.lookup_get_peers(lookup, n)
+      if send_count >= 3:
+        break 
+    lookup.step_time = getruntime()
+    return
 
-		if finished:
-			lookup.done = 1 
-			lookup.step_time = getruntime()
-			if callback:
-				return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
+    if finished:
+      lookup.done = 1 
+      lookup.step_time = getruntime()
+      if callback:
+        return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
 
-		lookup.step_time = getruntime()
+    lookup.step_time = getruntime()
 
-	def lookup_get_peers(self, lookup, node=None):
-		if not node:
-			for n in lookup.get_nodes():
-				if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
-					node = n 
-					break 
-		if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
-			return 0 
+  def lookup_get_peers(self, lookup, node=None):
+    if not node:
+      for n in lookup.get_nodes():
+        if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
+          node = n 
+          break 
+    if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
+      return 0 
 
-		log ("Sending get_peers.\n")
-		tid = make_tid("gp", lookup.tid)
-		# send get_peers 
-		self.rpc.get_peers(node.ip, node.port, tid, len(tid), lookup.id)
-		node.pinged += 1 
-		node.last_req = getruntime()
-		router_node = self.router.find_node(node.long_id)
-		if router_node:
-			self.router.pinged(router_node)
-		return 1 
+    log ("Sending get_peers.\n")
+    tid = make_tid("gp", lookup.tid)
+    # send get_peers 
+    self.rpc.get_peers(node.ip, node.port, tid, len(tid), lookup.id)
+    node.pinged += 1 
+    node.last_req = getruntime()
+    router_node = self.router.find_node(node.long_id)
+    if router_node:
+      self.router.pinged(router_node)
+    return 1 
 
-	def find_lookup_by_tid(self, tid):
-		for l in self.lookups:
-			if l.tid == int(tid):
-				return l 
-		return None 
+  def find_lookup_by_tid(self, tid):
+    for l in self.lookups:
+      if l.tid == int(tid):
+        return l 
+    return None 
 
-	def expire_lookups(self):
-		for l in self.lookups:
-			if l.step_time < getruntime() - DHT_SEARCH_EXPIRE_TIME:
-				self.lookups.remove(l)
+  def expire_lookups(self):
+    for l in self.lookups:
+      if l.step_time < getruntime() - DHT_SEARCH_EXPIRE_TIME:
+        self.lookups.remove(l)
 
 
 class Lookup:
 
-	def __init__(self, string_id, tid, capacity):
-		self.id = string_id
-		self.target_id = string_to_long(self.id)
-		self.capacity = capacity
-		self.tid = tid 
-		self.port = 0  # 0 for pure searches 
-		self.step_time = 0 
-		self.done = 0 
-		self.list = list() # sorted: closest at head, furthest at tail 
+  def __init__(self, string_id, tid, capacity):
+    self.id = string_id
+    self.target_id = string_to_long(self.id)
+    self.capacity = capacity
+    self.tid = tid 
+    self.port = 0  # 0 for pure searches 
+    self.step_time = 0 
+    self.done = 0 
+    self.list = list() # sorted: closest at head, furthest at tail 
 
-	# Insert into the lookup list: 
-	# if new contact's dist to target is less than the furthest in the list, 
-	# insert it and discard the old furthest if necessary (exceed capacity). 
-	# Otherwise, if the contact already exist or is further than the furthest, discard it. 
-	def insert(self, id, ip, port, replied=0, token=None, token_len=0):
+  # Insert into the lookup list: 
+  # if new contact's dist to target is less than the furthest in the list, 
+  # insert it and discard the old furthest if necessary (exceed capacity). 
+  # Otherwise, if the contact already exist or is further than the furthest, discard it. 
+  def insert(self, id, ip, port, replied=0, token=None, token_len=0):
 
-		lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
+    lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
 
-		if len(self.list) == 0:
-			self.list.append(lookup_node)
-			return 
+    if len(self.list) == 0:
+      self.list.append(lookup_node)
+      return 
 
-		for i in range(len(self.list)):
-			n = self.list[i]
-			comparison = compare_distance(self.target_id, lookup_node.long_id, n.long_id)
-			if comparison == 0:
-				# found 
-				if replied:
-					n.replied = 1 
-					n.last_replied = getruntime()
-					n.last_req = 0 
-					n.pinged = 0 
+    for i in range(len(self.list)):
+      n = self.list[i]
+      comparison = compare_distance(self.target_id, lookup_node.long_id, n.long_id)
+      if comparison == 0:
+        # found 
+        if replied:
+          n.replied = 1 
+          n.last_replied = getruntime()
+          n.last_req = 0 
+          n.pinged = 0 
 
-					if token:
-						if token_len >= 40:
-							log ("Overlong token.\n")
-						else:
-							n.token = token 
-							n.token_len = token_len 
-				return 
-			elif comparison > 0:
-				continue 
-			else: # node is closer  
-				self.list.insert(i, lookup_node)
-				if len(self.list) > self.capacity:
-					self.list.pop()
-				return 
-		# if there's room in capacity after looping through self.list, just append new node 
-		if len(self.list) < self.capacity:
-			self.list.append(lookup_node)
+          if token:
+            if token_len >= 40:
+              log ("Overlong token.\n")
+            else:
+              n.token = token 
+              n.token_len = token_len 
+        return 
+      elif comparison > 0:
+        continue 
+      else: # node is closer  
+        self.list.insert(i, lookup_node)
+        if len(self.list) > self.capacity:
+          self.list.pop()
+        return 
+    # if there's room in capacity after looping through self.list, just append new node 
+    if len(self.list) < self.capacity:
+      self.list.append(lookup_node)
 
-	def remove(self, lookup_node):
-		if lookup_node in self.list:
-			self.list.remove(lookup_node)
-			return True 
-		return False 
+  def remove(self, lookup_node):
+    if lookup_node in self.list:
+      self.list.remove(lookup_node)
+      return True 
+    return False 
 
-	def all_replied(self):
-		live_node_count = 0 
+  def all_replied(self):
+    live_node_count = 0 
 
-		for n in self.list:
-			if n.pinged >= 3: 
-				continue 		
-			if live_node_count >= 8:
-				return True  
-			if not n.replied:
-				return False  
-			live_node_count += 1 
+    for n in self.list:
+      if n.pinged >= 3: 
+        continue    
+      if live_node_count >= 8:
+        return True  
+      if not n.replied:
+        return False  
+      live_node_count += 1 
 
-		return False 
+    return False 
 
-	def get_nodes(self):
-		return self.list 
+  def get_nodes(self):
+    return self.list 
 
-	def get_all_ids(self):
-		return [n.long_id for n in self.list]
+  def get_all_ids(self):
+    return [n.long_id for n in self.list]
 
-	def is_full(self):
-		return len(self.list) >= self.capacity
+  def is_full(self):
+    return len(self.list) >= self.capacity
 
-	def __str__(self):
-		output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
-							(self.target_id, self.tid, self.port, self.step_time, self.done))
-		output += "lookup nodes (%d): \n" % len(self.list)
-		for l in self.list:
-			output += l.ip + "\t" + str(l.replied) + "\n"
-		return output 
+  def __str__(self):
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
+              (self.target_id, self.tid, self.port, self.step_time, self.done))
+    output += "lookup nodes (%d): \n" % len(self.list)
+    for l in self.list:
+      output += l.ip + "\t" + str(l.replied) + "\n"
+    return output 
 
 class Lookup_Node():
-	def __init__(self, id, ip, port, replied, token, token_len):
-		self.id = id 
-		self.long_id = string_to_long(self.id)
-		self.ip = ip 
-		self.port = port 
-		self.replied = replied 
-		self.last_replied = 0 
-		self.last_req = 0 
-		self.acked = 0 
-		self.token = token 
-		self.token_len = token_len
-		self.pinged = 0 
+  def __init__(self, id, ip, port, replied, token, token_len):
+    self.id = id 
+    self.long_id = string_to_long(self.id)
+    self.ip = ip 
+    self.port = port 
+    self.replied = replied 
+    self.last_replied = 0 
+    self.last_req = 0 
+    self.acked = 0 
+    self.token = token 
+    self.token_len = token_len
+    self.pinged = 0 

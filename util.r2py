@@ -6,26 +6,26 @@ timeport = list(getresources()[0]["connport"])[0]
 time_updatetime(timeport)
 
 def get_time():
-	return time_gettime()
+  return time_gettime()
 
 # 4-byte transaction id string  
 def make_tid(prefix, sequence):
-	output = ""
-	for n in prefix:
-		output += chr(ord(n) & 0xFF) 
-	binary_seq = "{0:b}".format(sequence)[:16] # get the first 16 bits (2 bytes) of the integer 
-	output += str(int(binary_seq, 2))
-	# output += str(sequence)[:2]
-	# log(output, "\n")
-	# return a character / int list 
-	return output 
+  output = ""
+  for n in prefix:
+    output += chr(ord(n) & 0xFF) 
+  binary_seq = "{0:b}".format(sequence)[:16] # get the first 16 bits (2 bytes) of the integer 
+  output += str(int(binary_seq, 2))
+  # output += str(sequence)[:2]
+  # log(output, "\n")
+  # return a character / int list 
+  return output 
 
 # return the sequence taken from tid if matches, else return -1 
 def tid_match(tid, prefix):
-	if len(tid) > 2 and tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
-		return tid[2:]
-	else:
-		return False  
+  if len(tid) > 2 and tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
+    return tid[2:]
+  else:
+    return False  
 
 
 ROTATE_SECRET_INTERVAL = 5 * 60
@@ -33,32 +33,32 @@ SECRET_SIZE = 8
 
 # tokens are rotated every 5 min; tokens up to 10 min old are accepted 
 def rotate_secret(secret=None):
-	old_secret = None  
-	if secret:
-		old_secret = str(secret)
+  old_secret = None  
+  if secret:
+    old_secret = str(secret)
 
-	secret = random_randombytes(SECRET_SIZE)
-	rotate_secret_time = getruntime() + ROTATE_SECRET_INTERVAL 
+  secret = random_randombytes(SECRET_SIZE)
+  rotate_secret_time = getruntime() + ROTATE_SECRET_INTERVAL 
 
-	return (old_secret, secret, rotate_secret_time)
+  return (old_secret, secret, rotate_secret_time)
 
 # 16 byte token 
 def make_token(ip, secret):
-	return sha_hash(str(ip) + secret)
+  return sha_hash(str(ip) + secret)
 
 def token_match(token, ip, old_secret, secret):
-	if old_secret:
-		old_hash = sha_hash(str(ip) + old_secret)
-		if old_hash == token: return True 
-	if secret:
-		now_hash = sha_hash(str(ip) + secret)
-		if now_hash == token: return True 
+  if old_secret:
+    old_hash = sha_hash(str(ip) + old_secret)
+    if old_hash == token: return True 
+  if secret:
+    now_hash = sha_hash(str(ip) + secret)
+    if now_hash == token: return True 
 
-	return False 
+  return False 
 
 LID_BIT_SIZE = 16 
 def make_lid():
-	return random_nbit_int(LID_BIT_SIZE)
+  return random_nbit_int(LID_BIT_SIZE)
 
 # Converts 20 bytes into a long number
 def string_to_long(data):
@@ -71,24 +71,24 @@ def string_to_long(data):
   return num
 
 def xor_distance(num1, num2):
-	return num1 ^ num2 
+  return num1 ^ num2 
 
 # if positive, dist from num1 > dist from num2 
 def compare_distance(target, num1, num2):
-	return xor_distance(target, num1) - xor_distance(target, num2)
+  return xor_distance(target, num1) - xor_distance(target, num2)
 
 def ip_as_bytes(ip):
-	ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
-	return ip_as_bytes
+  ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
+  return ip_as_bytes
 
 def htons(num):
-	# if integer is 2-byte 
-	if (num.bit_length() + 7) // 8 == 2:
-		n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
-		# log (n, "\n")
-		return _random_long_to_bytes(n)
-	log ("htons: integer is not 2 bytes.\n")
-	return -1 
+  # if integer is 2-byte 
+  if (num.bit_length() + 7) // 8 == 2:
+    n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
+    # log (n, "\n")
+    return _random_long_to_bytes(n)
+  log ("htons: integer is not 2 bytes.\n")
+  return -1 
 
 def bytes_to_int(bytes):
   n = 0
@@ -101,168 +101,168 @@ def bytes_to_int(bytes):
 
 
 def length_check(index, length, buf_len):
-	if index + length > buf_len:
-		log ("Failed length check.\n")
-		return False 
-	return True 
+  if index + length > buf_len:
+    log ("Failed length check.\n")
+    return False 
+  return True 
 
 
 """
-	For now (k = 8)
-	Max number of nodes to send: 8 
-	Max number of peers to send: 8 
+  For now (k = 8)
+  Max number of nodes to send: 8 
+  Max number of peers to send: 8 
 """
 def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6): 
-	# change string.find to a more efficient method??
-	buf_len = len(buf)
-	sender_id = info_hash = target = token = ""
-	tid = ""
-	nodes = list()
-	values = list()
-	port = 0 
+  # change string.find to a more efficient method??
+  buf_len = len(buf)
+  sender_id = info_hash = target = token = ""
+  tid = ""
+  nodes = list()
+  values = list()
+  port = 0 
 
-	# parse tid if it exists and adheres to our rule 
-	p = buf.find("1:t")
-	if p > -1:
-		l = int(buf[p+3])
-		if 0 < l <= tid_len and buf[p+4] == ":":
-			k = p+5
-			while k < buf_len and not (buf[k] == "1" and buf[k+1] == ":"):
-				tid += buf[k]
-				k += 1 
-			tid_len = len(tid)
-			log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
-		else:
-			tid_len = 0 
-	else:
-		tid_len = 0 
+  # parse tid if it exists and adheres to our rule 
+  p = buf.find("1:t")
+  if p > -1:
+    l = int(buf[p+3])
+    if 0 < l <= tid_len and buf[p+4] == ":":
+      k = p+5
+      while k < buf_len and not (buf[k] == "1" and buf[k+1] == ":"):
+        tid += buf[k]
+        k += 1 
+      tid_len = len(tid)
+      log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
+    else:
+      tid_len = 0 
+  else:
+    tid_len = 0 
 
-	p = buf.find("2:id20:")
-	if p > -1:
-		if length_check(p+7, 20, buf_len):
-			sender_id = buf[p+7:p+7+20]
-			log ("sender id: ", sender_id, "\n")
-		else:
-			sender_id = 0 
+  p = buf.find("2:id20:")
+  if p > -1:
+    if length_check(p+7, 20, buf_len):
+      sender_id = buf[p+7:p+7+20]
+      log ("sender id: ", sender_id, "\n")
+    else:
+      sender_id = 0 
 
-	p = buf.find("9:info_hash20:")
-	if p > -1:
-		if length_check(p+14, 20, buf_len):
-			info_hash = buf[p+14:p+14+20]
-			log ("infohash: ", info_hash, "\n")
-		else:
-			info_hash = 0 
+  p = buf.find("9:info_hash20:")
+  if p > -1:
+    if length_check(p+14, 20, buf_len):
+      info_hash = buf[p+14:p+14+20]
+      log ("infohash: ", info_hash, "\n")
+    else:
+      info_hash = 0 
 
-	p = buf.find("porti")
-	if p > -1:
-		n_str = ""
-		q = p+5
-		while q < buf_len and buf[q].isdigit():
-			n_str += buf[q]
-			q += 1 
-		n = int(n_str)
-		if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
-			log ("port: ", n, "\n")
-			port = n
+  p = buf.find("porti")
+  if p > -1:
+    n_str = ""
+    q = p+5
+    while q < buf_len and buf[q].isdigit():
+      n_str += buf[q]
+      q += 1 
+    n = int(n_str)
+    if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
+      log ("port: ", n, "\n")
+      port = n
 
-	p = buf.find("6:target20:")
-	if p > -1:
-		if length_check(p+11, 20, buf_len):
-			target = buf[p+11:p+11+20]
-			log("target: ", target, "\n")
-		else:
-			target = 0 
+  p = buf.find("6:target20:")
+  if p > -1:
+    if length_check(p+11, 20, buf_len):
+      target = buf[p+11:p+11+20]
+      log("target: ", target, "\n")
+    else:
+      target = 0 
 
-	p = buf.find("5:token")
-	if p > -1:
-		l_str = ""
-		q = p+7 
-		while q < buf_len and buf[q].isdigit():
-			l_str += buf[q]
-			q += 1 
-		l = int(l_str)
-		if (0 < l <= token_len and buf[q] == ":" and length_check(p+7, token_len, buf_len)):
-			token = buf[q+1:q+1+l]
-			token_len = l 
-			log ("token(token_len): ", token, " (", token_len, ") \n")
-		else: 
-			token_len = 0 
-	else:
-		token_len = 0
+  p = buf.find("5:token")
+  if p > -1:
+    l_str = ""
+    q = p+7 
+    while q < buf_len and buf[q].isdigit():
+      l_str += buf[q]
+      q += 1 
+    l = int(l_str)
+    if (0 < l <= token_len and buf[q] == ":" and length_check(p+7, token_len, buf_len)):
+      token = buf[q+1:q+1+l]
+      token_len = l 
+      log ("token(token_len): ", token, " (", token_len, ") \n")
+    else: 
+      token_len = 0 
+  else:
+    token_len = 0
 
-	p = buf.find("5:nodes")
-	if p > -1:
-		l_str = ""
-		q = p+7 
-		while q < buf_len and buf[q].isdigit():
-			l_str += buf[q]
-			q += 1 
-		l = int(l_str)
-		if 0 < l <= nodes_len and buf[q] == ":":
-			k = q+1
-			# while k < buf_len and not (buf[k] == "5" and buf[k+1] == ":"):
-			while k < buf_len and k < l + (q+1):
-				nodes.append(ord(buf[k]))
-				k += 1 
-			nodes_len = len(nodes)
-			log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
-		else:
-			nodes_len = 0 
-	else:
-		nodes_len = 0  
+  p = buf.find("5:nodes")
+  if p > -1:
+    l_str = ""
+    q = p+7 
+    while q < buf_len and buf[q].isdigit():
+      l_str += buf[q]
+      q += 1 
+    l = int(l_str)
+    if 0 < l <= nodes_len and buf[q] == ":":
+      k = q+1
+      # while k < buf_len and not (buf[k] == "5" and buf[k+1] == ":"):
+      while k < buf_len and k < l + (q+1):
+        nodes.append(ord(buf[k]))
+        k += 1 
+      nodes_len = len(nodes)
+      log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
+    else:
+      nodes_len = 0 
+  else:
+    nodes_len = 0  
 
-	# parse values 
-	p = buf.find("6:valuesl")
-	if p > -1:
-		q = p+9 
-		while True: 
-			l_str = ""
-			l = 0 
-			while q < buf_len and buf[q].isdigit():
-				l_str += buf[q]
-				q += 1 
-			if l_str:
-				l = int(l_str)
-			if q < buf_len and buf[q] == ":":
-				if l == 6:
-					k = q+1
-					while not ((buf[k] == "6" and buf[k+1] == ":") or buf[k] == "e"):
-						values.append(ord(buf[k]))
-						k += 1 
-					q = k
-				else:
-					log ("Received weird value -- %d bytes.\n" % l )
-			else:
-				break 
-		if q < buf_len and buf[q] == "e":
-			values_len = len(values)
-			log ("values(len): ", values, " (", values_len, ") \n")
-		else:
-			log ("Unexpected end for values.\n")
-	else:
-		values_len = 0 
+  # parse values 
+  p = buf.find("6:valuesl")
+  if p > -1:
+    q = p+9 
+    while True: 
+      l_str = ""
+      l = 0 
+      while q < buf_len and buf[q].isdigit():
+        l_str += buf[q]
+        q += 1 
+      if l_str:
+        l = int(l_str)
+      if q < buf_len and buf[q] == ":":
+        if l == 6:
+          k = q+1
+          while not ((buf[k] == "6" and buf[k+1] == ":") or buf[k] == "e"):
+            values.append(ord(buf[k]))
+            k += 1 
+          q = k
+        else:
+          log ("Received weird value -- %d bytes.\n" % l )
+      else:
+        break 
+    if q < buf_len and buf[q] == "e":
+      values_len = len(values)
+      log ("values(len): ", values, " (", values_len, ") \n")
+    else:
+      log ("Unexpected end for values.\n")
+  else:
+    values_len = 0 
 
-	msg_type = -1 
+  msg_type = -1 
 
-	if buf.find("1:y1:r") > -1:
-		msg_type = "REPLY"
-	elif buf.find("1:y1:e") > -1:
-		msg_type = "ERROR"		
-	elif buf.find("1:y1:q") == -1:
-		msg_type = -1 
-	elif buf.find("1:q4:ping") > -1:
-		msg_type = "PING"
-	elif buf.find("1:q9:find_node") > -1:
-		msg_type = "FIND_NODE"
-	elif buf.find("1:q9:get_peers") > -1:
-		msg_type = "GET_PEERS"
-	elif buf.find("1:q13:announce_peer") > -1:
-		msg_type = "ANNOUNCE_PEER"
-	
-	# log (msg_type, "\n")
+  if buf.find("1:y1:r") > -1:
+    msg_type = "REPLY"
+  elif buf.find("1:y1:e") > -1:
+    msg_type = "ERROR"    
+  elif buf.find("1:y1:q") == -1:
+    msg_type = -1 
+  elif buf.find("1:q4:ping") > -1:
+    msg_type = "PING"
+  elif buf.find("1:q9:find_node") > -1:
+    msg_type = "FIND_NODE"
+  elif buf.find("1:q9:get_peers") > -1:
+    msg_type = "GET_PEERS"
+  elif buf.find("1:q13:announce_peer") > -1:
+    msg_type = "ANNOUNCE_PEER"
+  
+  # log (msg_type, "\n")
 
-	if msg_type == -1:
-		return -1 
-	else:
-		return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
-						token, token_len, nodes, nodes_len, values, values_len)
+  if msg_type == -1:
+    return -1 
+  else:
+    return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
+            token, token_len, nodes, nodes_len, values, values_len)

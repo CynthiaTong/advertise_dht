@@ -14,248 +14,241 @@ K_SIZE = 8
 
 class DHT:
 
-	def __init__(self, dht_id):
-		self.id = dht_id
-		self.long_id = string_to_long(self.id)
+  def __init__(self, dht_id):
+    self.id = dht_id
+    self.long_id = string_to_long(self.id)
 
-		self.rpc = RPC(self.id)
-		self.router = RoutingTable(self.id, K_SIZE, self.rpc) 
-		self.rpc.router = self.router
+    self.rpc = RPC(self.id)
+    self.router = RoutingTable(self.id, K_SIZE, self.rpc) 
+    self.rpc.router = self.router
 
-		self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
-		self.storage = Storage(self.id) 
-		self.secret_package = rotate_secret() 
-		self.refresh_buckets_time = getruntime() + random_int_below(3)
+    self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
+    self.storage = Storage(self.id) 
+    self.secret_package = rotate_secret() 
+    self.refresh_buckets_time = getruntime() + random_int_below(3)
 
-		# bucket_grow_time for mybucket maintenance? 
-		# token_bucket_time for rate control?
+    # bucket_grow_time for mybucket maintenance? 
+    # token_bucket_time for rate control?
 
-	def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
+  def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
 
-		if buf and len(buf) > 0:
-			if self.invalid_address(source_ip, source_port):
-				return self.periodic()
+    if buf and len(buf) > 0:
+      if invalid_address(source_ip, source_port):
+        return self.periodic()
 
-			msg = parse_message(buf)
-			if msg == -1:
-				return self.periodic()
+      msg = parse_message(buf)
+      if msg == -1:
+        return self.periodic()
 
-			# log (msg, "\n")
-			(msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
-			nodes, nodes_len, values, values_len) = msg 
+      # log (msg, "\n")
+      (msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
+      nodes, nodes_len, values, values_len) = msg 
 
-			nodes_len = int(nodes_len)
-			values_len = int(values_len)
-			token_len= int(token_len)
+      nodes_len = int(nodes_len)
+      values_len = int(values_len)
+      token_len= int(token_len)
 
-			if msg_type == "ERROR" or string_to_long(sender_id) == 0:
-				log ("Faulty message - unparseable: \n", buf, "\n")
-				return self.periodic()
+      if msg_type == "ERROR" or string_to_long(sender_id) == 0:
+        log ("Faulty message - unparseable: \n", buf, "\n")
+        return self.periodic()
 
-			if sender_id == self.id:
-				log ("Received message from self. weird.\n")
-				return self.periodic()
+      if sender_id == self.id:
+        log ("Received message from self. weird.\n")
+        return self.periodic()
 
-			## Rate control ?? 
+      ## Rate control ?? 
 
-			if msg_type == "REPLY":
-				# if not tid_len == 4:
-				# 	log ("Broken tid:\n", buf, "\n")
-				# 	return self.periodic()
+      if msg_type == "REPLY":
+        if not tid_len == 4:
+          log ("Broken tid:\n", buf, "\n")
+          return self.periodic()
 
-				if tid_match(tid, "pn"):
-					log ("Pong!\n")
-					self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
+        if tid_match(tid, "pn"):
+          log ("Pong!\n")
+          self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
 
-				elif tid_match(tid, "gp") or tid_match(tid, "fn"):
-					lids = (tid_match(tid, "gp") , tid_match(tid, "fn"))
-					# log ("LIDS: ", lids, "\n")
-					# try to find among existing lookups by searching lid 
-					for lid in lids:
-						if lid:
-							lookup = self.lookups.find_lookup_by_tid(lid) 
-							log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
-							# check nodes_len is normal 
-							if not nodes_len % 26 == 0:
-								log ("Unexpected length for node info!\n")
-							elif lookup == None:
-								log ("Unknown lookup!\n")
-								self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
-							else: # nodes_len normal & existing lookup - it's a proper reply 
-								self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-								i = 0 
-								while i <= nodes_len - 26:
-									n = nodes[i:i+26]
-									# convert id, ip and port to host order and readable format 
-									n_id = ""
-									for x in n[:20]:
-										n_id += chr(int(x))
+        elif tid_match(tid, "gp") or tid_match(tid, "fn"):
+          lids = (tid_match(tid, "gp") , tid_match(tid, "fn"))
+          # log ("LIDS: ", lids, "\n")
+          # try to find among existing lookups by searching lid 
+          for lid in lids:
+            if lid:
+              lookup = self.lookups.find_lookup_by_tid(lid) 
+              log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
+              # check nodes_len is normal 
+              if not nodes_len % 26 == 0:
+                log ("Unexpected length for node info!\n")
+              elif lookup == None:
+                log ("Unknown lookup!\n")
+                self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
+              else: # nodes_len normal & existing lookup - it's a proper reply 
+                self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+                i = 0 
+                while i <= nodes_len - 26:
+                  n = nodes[i:i+26]
+                  # convert id, ip and port to host order and readable format 
+                  n_id = ""
+                  for x in n[:20]:
+                    n_id += chr(int(x))
 
-									ip_strs = list()
-									for x in n[20:24]:
-										ip_strs.append(str(x))
-									n_ip = ".".join(ip_strs)
+                  ip_strs = list()
+                  for x in n[20:24]:
+                    ip_strs.append(str(x))
+                  n_ip = ".".join(ip_strs)
 
-									n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
-									i += 26 
-									log (n_ip, ": ", n_port, "\n")
-									if n_id == self.id:
-										continue;
-									self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
-									# insert into the corresponding lookup  
-									lookup.insert(n_id, n_ip, n_port)
-								# since we got a reply, send out another lookup request 
-								self.lookups.lookup_get_peers(lookup)
-								# 1 means this node has replied 
-								lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-								log ("--------- LOOKUP ---------\n", str(lookup), "\n")
+                  n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
+                  i += 26 
+                  log (n_ip, ": ", n_port, "\n")
+                  if n_id == self.id:
+                    continue;
+                  self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
+                  # insert into the corresponding lookup  
+                  lookup.insert(n_id, n_ip, n_port)
+                  # self.ping_node(n_ip, n_port)
+                # since we got a reply, send out another lookup request 
+                self.lookups.lookup_get_peers(lookup)
+                # 1 means this node has replied 
+                lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
+                log ("--------- LOOKUP ---------\n", str(lookup), "\n")
 
-					if values_len > 0 and lids[0]:
-						log ("Got %d values!\n" % (values_len/6))
-						filtered_values = list()
-						i = 0 
-						while i < values_len:
-							v = values[i:i+6]
-							ip_strs = list()
-							for x in v[0:4]:
-								ip_strs.append(str(x))
-							v_ip = ".".join(ip_strs)
+          if values_len > 0 and lids[0]:
+            log ("Got %d values!\n" % (values_len/6))
+            filtered_values = list()
+            i = 0 
+            while i < values_len:
+              v = values[i:i+6]
+              ip_strs = list()
+              for x in v[0:4]:
+                ip_strs.append(str(x))
+              v_ip = ".".join(ip_strs)
 
-							v_port = bytes_to_int(v[4:])  # convert port bytes back to an integer
-							i += 6
-							filtered_values.append((v_ip, v_port))
-							log (v_ip, ": ", v_port, "\n")
-						if callback:
-							return callback(DHT_EVENT_VALUES, lookup.target_id, filtered_values, len(filtered_values))
+              v_port = bytes_to_int(v[4:])  # convert port bytes back to an integer
+              i += 6
+              filtered_values.append((v_ip, v_port))
+              log (v_ip, ": ", v_port, "\n")
+            if callback:
+              return callback(DHT_EVENT_VALUES, lookup.target_id, filtered_values, len(filtered_values))
 
-				elif tid_match(tid, "ap"):	
-					log ("Got reply to announce_peer!\n")
-					lid = tid_match(tid, "ap")
-					lookup = self.lookups.find_lookup_by_tid(lid) 
-					if lookup == None:
-						log ("Unknown lookup!\n")
-						self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
-					else:
-						self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-						for n in lookup:
-							if n.id == sender_id:
-								n.last_req = 0 
-								n.replied = 1 
-								n.last_replied = getruntime()
-								n.acked = 1 
-								n.pinged = 0 
-								break 
+        elif tid_match(tid, "ap"):  
+          log ("Got reply to announce_peer!\n")
+          lid = tid_match(tid, "ap")
+          lookup = self.lookups.find_lookup_by_tid(lid) 
+          if lookup == None:
+            log ("Unknown lookup!\n")
+            self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
+          else:
+            self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+            for n in lookup:
+              if n.id == sender_id:
+                n.last_req = 0 
+                n.replied = 1 
+                n.last_replied = getruntime()
+                n.acked = 1 
+                n.pinged = 0 
+                break 
 
-						self.lookups.lookup_get_peers(lookup)
+            self.lookups.lookup_get_peers(lookup)
 
-				else:
-					log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
+        else:
+          log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
 
-			elif msg_type == "PING":
-				log ("Ping!\n")
-				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-				log ("Sending pong.\n")
-				self.rpc.pong(source_ip, source_port, tid, tid_len)
+      elif msg_type == "PING":
+        log ("Ping!\n")
+        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+        log ("Sending pong.\n")
+        self.rpc.pong(source_ip, source_port, tid, tid_len)
 
-			elif msg_type == "FIND_NODE":
-				log ("Find node!\n")
-				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-				log ("Sending closest node to find_node req.\n")
-				self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, target)
+      elif msg_type == "FIND_NODE":
+        log ("Find node!\n")
+        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+        log ("Sending closest node to find_node req.\n")
+        self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, target)
 
-			elif msg_type == "GET_PEERS":
-				log ("Get peers!\n")
-				self.rounter.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-				if string_to_long(info_hash) == 0:
-					log ("Got get_peers with no info_hash\n")
-					self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Get_peers with no infohash.")
-				else:
-					peers_list = self.storage.retrieve(info_hash)
-					token = make_token(source_ip, self.secret_package[1])
-					if peers_list:
-						log ("Sending found peers.\n")
-						self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash, 
-																				token, TOKEN_SIZE, peers_list)
-					else:
-						log ("Sending nodes for get_peers.\n")
-						self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash)
+      elif msg_type == "GET_PEERS":
+        log ("Get peers!\n")
+        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+        if string_to_long(info_hash) == 0:
+          log ("Got get_peers with no info_hash\n")
+          self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+                              203, "Get_peers with no infohash.")
+        else:
+          peers_list = self.storage.retrieve(info_hash)
+          token = make_token(source_ip, self.secret_package[1])
+          if peers_list:
+            log ("Sending found peers.\n")
+            self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash, 
+                                        token, TOKEN_SIZE, peers_list)
+          else:
+            log ("Sending nodes for get_peers.\n")
+            self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash)
 
-			elif msg_type == "ANNOUNCE_PEER":
-				log ("Announce peer!\n")
-				self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-				if string_to_long(info_hash) == 0:
-					log ("Got announce_peer with no info_hash\n")
-					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with no infohash.")		
-				if port == 0:
-					log ("Got announce_peer with port 0\n")
-					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with forbidden port number.")		
-				if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
-					log ("Got announce_peer with invalid token\n")
-					return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-															203, "Announce_peer with invalid token.")	
+      elif msg_type == "ANNOUNCE_PEER":
+        log ("Announce peer!\n")
+        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+        if string_to_long(info_hash) == 0:
+          log ("Got announce_peer with no info_hash\n")
+          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+                              203, "Announce_peer with no infohash.")   
+        if port == 0:
+          log ("Got announce_peer with port 0\n")
+          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+                              203, "Announce_peer with forbidden port number.")   
+        if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
+          log ("Got announce_peer with invalid token\n")
+          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+                              203, "Announce_peer with invalid token.") 
 
-				self.storage.store(sender_id, source_ip, source_port)
-				log ("Sending peer announced.\n")
-				self.rpc.peer_announced(source_ip, source_port, tid, tid_len)
+        self.storage.store(sender_id, source_ip, source_port)
+        log ("Sending peer announced.\n")
+        self.rpc.peer_announced(source_ip, source_port, tid, tid_len)
 
+  def periodic(self):
+    log ("do periodic stuff.\n")
+    # if now > rotate_secret_time 
+    if getruntime() >= self.secret_package[2]: 
+      rotate_secret(self.secret_package[1])
 
-	def invalid_address(self, ip, port):
-		# log (ip, ": ", port, "\n")
-		ip_list = [int(n) for n in ip.split(".")]
-		if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
-			return True 
-		return False 	
+    if getruntime() >= self.router.expire_stuff_time:
+      self.router.expire_buckets()
+      self.storage.expire_storage()
+      self.lookups.expire_lookups()
 
-	def periodic(self):
-		log ("do periodic stuff.\n")
-		# if now > rotate_secret_time 
-		if getruntime() >= self.secret_package[2]: 
-			rotate_secret(self.secret_package[1])
+    if 0 < self.lookups.lookup_time <= getruntime():
+      # execute the lookups 
+      if len(self.lookups) > 0:
+        for l in self.lookups:
+          if not l.done and l.step_time <= getruntime() - 5:
+            self.lookups.lookup_step(l, callback)
 
-		if getruntime() >= self.router.expire_stuff_time:
-			self.router.expire_buckets()
-			self.storage.expire_storage()
-			self.lookups.expire_lookups()
+      # increase lookup_time for next rounds of steps 
+      self.lookups.lookup_time = 0 
+      for l in self.lookups:
+        if not l.done:
+          l_time = l.step_time + 15 + random_int_below(10)
+          if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
+            self.lookups.lookup_time = l_time
 
-		if 0 < self.lookups.lookup_time <= getruntime():
-			# execute the lookups 
-			if len(self.lookups) > 0:
-				for l in self.lookups:
-					if not l.done and l.step_time <= getruntime() - 5:
-						self.lookups.lookup_step(l, callback)
+    if self.refresh_buckets_time <= getruntime():
+      refreshed = self.router.refresh_buckets()
+      if refreshed:
+        self.refresh_buckets_time = getruntime() + 5 + random_int_below(20)   # next refresh in < 25 seconds 
+      else:
+        self.refresh_buckets_time = getruntime() + 60 + random_int_below(120)   # next refresh in 1 - 3 min 
 
-			# increase lookup_time for next rounds of steps 
-			self.lookups.lookup_time = 0 
-			for l in self.lookups:
-				if not l.done:
-					l_time = l.step_time + 15 + random_int_below(10)
-					if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
-						self.lookups.lookup_time = l_time
+    refresh_interval = self.refresh_buckets_time - getruntime()
+    if refresh_interval > 0:
+      to_sleep = refresh_interval
+    else:
+      to_sleep = 0 
 
-		if self.refresh_buckets_time <= getruntime():
-			refreshed = self.router.refresh_buckets()
-			if refreshed:
-				self.refresh_buckets_time = getruntime() + 5 + random_int_below(20)  	# next refresh in < 25 seconds 
-			else:
-				self.refresh_buckets_time = getruntime() + 60 + random_int_below(120)   # next refresh in 1 - 3 min 
+    if self.lookups.lookup_time > 0:
+      lookup_interval = self.lookups.lookup_time - getruntime()
+      if lookup_interval > 0:
+        to_sleep = lookup_interval
+      else:
+        to_sleep = 0 
+    return True 
 
-		refresh_interval = self.refresh_buckets_time - getruntime()
-		if refresh_interval > 0:
-			to_sleep = refresh_interval
-		else:
-			to_sleep = 0 
-
-		if self.lookups.lookup_time > 0:
-			lookup_interval = self.lookups.lookup_time - getruntime()
-			if lookup_interval > 0:
-				to_sleep = lookup_interval
-			else:
-				to_sleep = 0 
-		return True 
-
-	def ping_node(self, ip, port):
-		tid = make_tid("pn", 10)
-		return self.rpc.ping(ip, port, tid, 4)
+  def ping_node(self, ip, port):
+    tid = make_tid("pn", make_lid())
+    return self.rpc.ping(ip, port, tid, len(tid))

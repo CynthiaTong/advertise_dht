@@ -4,130 +4,130 @@ dy_import_module_symbols("util.r2py")
 
 class Bucket:
 
-	def __init__(self, min, max, ksize):
-		self.min = min
-		self.max = max
-		self.ksize = ksize
-		self.nodes = list()
-		self.replacements = list() #should be a stack (set)
-		# self.update_last_visited()
-		self.last_changed = 0
+  def __init__(self, min, max, ksize):
+    self.min = min
+    self.max = max
+    self.ksize = ksize
+    self.nodes = list()
+    self.replacements = list() #should be a stack (set)
+    # self.update_last_visited()
+    self.last_changed = 0
 
-	# this is not specified in the bittorrent protocol (although appears in the paper)
-	# def update_last_visited(self):
-	# 	self.last_visited = getruntime()
+  # this is not specified in the bittorrent protocol (although appears in the paper)
+  # def update_last_visited(self):
+  #   self.last_visited = getruntime()
 
-	# min: inclusive, max: exclusive 
-	def in_range(self, *args):
-		arg = args[0]
-		if isinstance(arg, Node):
-			return self.min <= arg.long_id < self.max
-		elif isinstance(arg, (int, long)):
-			return self.min <= arg <= self.max 
+  # min: inclusive, max: exclusive 
+  def in_range(self, *args):
+    arg = args[0]
+    if isinstance(arg, Node):
+      return self.min <= arg.long_id < self.max
+    elif isinstance(arg, (int, long)):
+      return self.min <= arg <= self.max 
 
-	def add_node(self, node, message_type=None):
-		duplicates = None 
-		for n in self.nodes:
-			if n.ip == node.ip and n.port == node.port:
-				duplicates = n		
-		if duplicates:
-			# move existing node to tail
-			self.nodes.remove(duplicates)
-			self.nodes.append(duplicates)
-			node = duplicates
-		elif len(self.nodes) < self.ksize:
-			self.nodes.append(node)
-		# New node and bucket full 
-		else:
-			return False
-		# node added, update bucket last_changed 
-		self.last_changed = getruntime()
-		self.update_time_info(node, message_type)
-		# log ("NEW NODE ", node.long_id, " ", node.pinged, " ", node.last_queried, " ", node.last_replied ,"\n")
-		return True
+  def add_node(self, node, message_type=None):
+    duplicates = None 
+    for n in self.nodes:
+      if n.ip == node.ip and n.port == node.port:
+        duplicates = n    
+    if duplicates:
+      # move existing node to tail
+      self.nodes.remove(duplicates)
+      self.nodes.append(duplicates)
+      node = duplicates
+    elif len(self.nodes) < self.ksize:
+      self.nodes.append(node)
+    # New node and bucket full 
+    else:
+      return False
+    # node added, update bucket last_changed 
+    self.last_changed = getruntime()
+    self.update_time_info(node, message_type)
+    # log ("NEW NODE ", node.long_id, " ", node.pinged, " ", node.last_queried, " ", node.last_replied ,"\n")
+    return True
 
-	def add_replacement(self, node, message_type):
-		# if the node exists in replacements, move it to tail (top)
-		duplicates = None 
-		for n in self.replacements:
-			if n.ip == node.ip and n.port == node.port:
-				duplicates = n	
-				break 	
-		if duplicates:
-			self.replacements.remove(duplicates)
-			node = duplicates
-		self.replacements.append(node)
-		self.update_time_info(node, message_type)
-	
-	# update node's time info based on the message type (req or res)
-	def update_time_info(self, node, message_type):
-		if message_type:
-			node.last_queried = getruntime()
-		else:
-			node.pinged = 0 
-			node.replied = 1 
-			node.last_replied = getruntime()
-			# node replied, update bucket last_changed 	
-			self.last_changed = getruntime()
+  def add_replacement(self, node, message_type):
+    # if the node exists in replacements, move it to tail (top)
+    duplicates = None 
+    for n in self.replacements:
+      if n.ip == node.ip and n.port == node.port:
+        duplicates = n  
+        break   
+    if duplicates:
+      self.replacements.remove(duplicates)
+      node = duplicates
+    self.replacements.append(node)
+    self.update_time_info(node, message_type)
+  
+  # update node's time info based on the message type (req or res)
+  def update_time_info(self, node, message_type):
+    if message_type:
+      node.last_queried = getruntime()
+    else:
+      node.pinged = 0 
+      node.replied = 1 
+      node.last_replied = getruntime()
+      # node replied, update bucket last_changed  
+      self.last_changed = getruntime()
 
-	def remove_node(self, node):
+  def remove_node(self, node):
 
-		if node not in self.nodes:
-			return False
+    if node not in self.nodes:
+      return False
 
-		self.nodes.remove(node)
-		# try adding a good node from the top of the replacement stack 
-		while len(self.replacements) > 0:
-			replacement_node = self.replacements.pop()
-			if replacement_node.good_node():
-				self.nodes.append(replacement_node)
-				# node replaced, update bucket last_changed 
-				self.last_changed = getruntime()
-				break 
-		return True
+    self.nodes.remove(node)
+    # try adding a good node from the top of the replacement stack 
+    while len(self.replacements) > 0:
+      replacement_node = self.replacements.pop()
+      if replacement_node.good_node():
+        self.nodes.append(replacement_node)
+        # node replaced, update bucket last_changed 
+        self.last_changed = getruntime()
+        break 
+    return True
 
-	def split(self):
-		if self.min >= self.max:
-			log("Cannot split bucket: min >= max")
-			return
+  def split(self):
+    if self.min >= self.max:
+      log("Cannot split bucket: min >= max")
+      return
 
-		mid = (self.min + self.max) / 2
-		bucket_1 = Bucket(self.min, mid, self.ksize)
-		bucket_2 = Bucket(mid, self.max, self.ksize)
+    mid = (self.min + self.max) / 2
+    bucket_1 = Bucket(self.min, mid, self.ksize)
+    bucket_2 = Bucket(mid, self.max, self.ksize)
 
-		for n in self.nodes:
-			new_bucket = None
-			if n.long_id <= mid:
-				new_bucket = bucket_1
-			else:
-				new_bucket = bucket_2
-			# new_bucket = bucket_1 if n.long_id <= mid else bucket_2
-			new_bucket.add_node(n)
+    for n in self.nodes:
+      new_bucket = None
+      if n.long_id <= mid:
+        new_bucket = bucket_1
+      else:
+        new_bucket = bucket_2
+      # new_bucket = bucket_1 if n.long_id <= mid else bucket_2
+      new_bucket.add_node(n)
 
-		return bucket_1, bucket_2
+    return bucket_1, bucket_2
 
-	# get all nodes (for lookups)
-	def get_nodes(self):
-		# # bucket is contacted for lookup, update last_visited  
-		# self.update_last_visited()
-		return self.nodes
+  # get all nodes (for lookups)
+  def get_nodes(self):
+    # # bucket is contacted for lookup, update last_visited  
+    # self.update_last_visited()
+    return self.nodes
 
-	def node_count(self):
-		return len(self.nodes)
+  def node_count(self):
+    return len(self.nodes)
 
-	# return the oldest node contact in this bucket 
-	def get_oldest(self):
-		return self.nodes[0]
+  # return the oldest node contact in this bucket 
+  def get_oldest(self):
+    return self.nodes[0]
 
-	def random_id(self):
-		return random_randint(self.min, self.max)
+  def random_id(self):
+    return random_randint(self.min, self.max)
 
-	def random_node(self):
-		n = random_int_below(len(self.nodes))
-		return self.nodes[n]
+  def random_node(self):
+    n = random_int_below(len(self.nodes))
+    return self.nodes[n]
 
-	def __str__(self):
-		output = ""
-		for n in self.nodes:
-			output += str(n) + "\n"
-		return output
+  def __str__(self):
+    output = ""
+    for n in self.nodes:
+      output += str(n) + "\n"
+    return output

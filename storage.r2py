@@ -5,77 +5,77 @@ TTL = 32 * 60
 
 class Storage: 
 
-	def __init__(self, string_id, ttl=TTL):
-		"""
-			Default storage expire time: 32 min 
-		"""
-		self.id = string_id
-		self.ttl = ttl  
-		self.peers = dict() # dictionary of arrays of peer objects 
-		self.numpeers = 0 
+  def __init__(self, string_id, ttl=TTL):
+    """
+      Default storage expire time: 32 min 
+    """
+    self.id = string_id
+    self.ttl = ttl  
+    self.peers = dict() # dictionary of arrays of peer objects 
+    self.numpeers = 0 
 
-	# store the <id, ip, port> triple into peers dict 
-	def store(self, id_key, ip, port):
-		storage_val = self.peers.get(id_key)
+  # store the <id, ip, port> triple into peers dict 
+  def store(self, id_key, ip, port):
+    storage_val = self.peers.get(id_key)
 
-		if storage_val == None:
-			self.peers[id_key] = [Peer(ip, port, getruntime())]
-			self.numpeers += 1 
-		else:
-			new_val = True 
-			for v in storage_val:
-				if ip == v.ip and port == v.port:
-					v.update_time(getruntime())
-					new_val = False 
-			if new_val:
-				storage_val.append(Peer(ip, port, getruntime()))
-				self.numpeers += 1 
+    if storage_val == None:
+      self.peers[id_key] = [Peer(ip, port, getruntime())]
+      self.numpeers += 1 
+    else:
+      new_val = True 
+      for v in storage_val:
+        if ip == v.ip and port == v.port:
+          v.update_time(getruntime())
+          new_val = False 
+      if new_val:
+        storage_val.append(Peer(ip, port, getruntime()))
+        self.numpeers += 1 
 
-	def retrieve(self, id_key):
-		if id_key in self.peers:
-			return self.peers[id_key]
+  def retrieve(self, id_key):
+    if id_key in self.peers:
+      return self.peers[id_key]
 
-	# should be called frequently 
-	def expire_storage(self):
-		for key, value in self.peers.items():
-			# log (value, "\n")
-			filtered = [p for p in value if getruntime() - p.stored_time < self.ttl]
-			# log (filtered, "\n") 
-			self.peers[key] = filtered
-			self.numpeers -= len(value) - len(filtered)
+  # should be called frequently 
+  def expire_storage(self):
+    for key, value in self.peers.items():
+      # log (value, "\n")
+      filtered = [p for p in value if getruntime() - p.stored_time < self.ttl]
+      # log (filtered, "\n") 
+      self.peers[key] = filtered
+      self.numpeers -= len(value) - len(filtered)
 
-	def __iter__(self):
-		return iter(self.peers)
+  def __iter__(self):
+    return iter(self.peers)
 
-	def __str__(self):
-		output = "Storage: \n"
-		for key, value in self.peers.items():
-			for p in value:
-				output += str(p) + "\t" 
-			output += "\n"
-		return output 
+  def __str__(self):
+    output = "Storage: \n"
+    for key, value in self.peers.items():
+      for p in value:
+        output += str(p) + "\t" 
+      output += "\n"
+    return output 
 
-	# def set(self, key, value):
-	# 	if key in self.peers:
-	# 		self.peers[key][0] = getruntime()
-	# 	else: 
-	# 		self.peers[key] = (getruntime(), value)		
+  # def set(self, key, value):
+  #   if key in self.peers:
+  #     self.peers[key][0] = getruntime()
+  #   else: 
+  #     self.peers[key] = (getruntime(), value)   
 
-	# def get(self, key):
-	# 	if key in self.peers:
-	# 		return self.peers[key][1]	
-	# 	else:
-	# 		return None 
+  # def get(self, key):
+  #   if key in self.peers:
+  #     return self.peers[key][1] 
+  #   else:
+  #     return None 
 
 class Peer:
-	def __init__(self, ip, port, time):
-		self.ip = ip 
-		self.port = port
-		self.stored_time = time
+  def __init__(self, ip, port, time):
+    self.ip = ip 
+    self.port = port
+    self.stored_time = time
 
-	def update_time(self, time):
-		self.stored_time = time 
+  def update_time(self, time):
+    self.stored_time = time 
 
-	def __str__(self):
-		age = getruntime() - self.stored_time
-		return self.ip + ":" + str(self.port) + "  Age: " + str(age) + " secs"
+  def __str__(self):
+    age = getruntime() - self.stored_time
+    return self.ip + ":" + str(self.port) + "  Age: " + str(age) + " secs"

@@ -7,234 +7,234 @@ dy_import_module_symbols("random.r2py")
 
 class RoutingTable:
 
-	def __init__(self, string_id, ksize, rpc=None):
-		self.id = string_id
-		self.long_id = string_to_long(string_id)
-		self.ksize = ksize 
-		self.expire_stuff_time = 0  
-		self.initial_bucket()
-		self.rpc = rpc 
+  def __init__(self, string_id, ksize, rpc=None):
+    self.id = string_id
+    self.long_id = string_to_long(string_id)
+    self.ksize = ksize 
+    self.expire_stuff_time = 0  
+    self.initial_bucket()
+    self.rpc = rpc 
 
-	def initial_bucket(self):
-		self.buckets = [Bucket(0, 2**160, self.ksize)]
+  def initial_bucket(self):
+    self.buckets = [Bucket(0, 2**160, self.ksize)]
 
-	def split_bucket(self, index, bucket):
-		self.ping_replacement(bucket)
-		bucket_1, bucket_2 = bucket.split()
-		self.buckets[index] = bucket_1 
-		self.buckets.insert(index+1, bucket_2)
+  def split_bucket(self, index, bucket):
+    self.ping_replacement(bucket)
+    bucket_1, bucket_2 = bucket.split()
+    self.buckets[index] = bucket_1 
+    self.buckets.insert(index+1, bucket_2)
 
-	# purge all bad nodes with pinged value >= 4 
-	def expire_buckets(self):
-		for b in self.buckets:
-			for n in b.nodes:
-				if n.pinged >= 4:
-					b.remove_node(n)
-					# ping a replacement node 
-					self.ping_replacement(b)
-					self.expire_stuff_time = getruntime() + 120 + random_int_below(240)
+  # purge all bad nodes with pinged value >= 4 
+  def expire_buckets(self):
+    for b in self.buckets:
+      for n in b.nodes:
+        if n.pinged >= 4:
+          b.remove_node(n)
+          # ping a replacement node 
+          self.ping_replacement(b)
+          self.expire_stuff_time = getruntime() + 120 + random_int_below(240)
 
-	"""
-		not necessarily "new" contact 
-		message_type: 
-			0 for reply 
-			1 for query 
-			2 for everything else  
-	"""
-	def add_contact(self, sender_id, ip, port, message_type):
-		node = Node(sender_id, ip, port)
+  """
+    not necessarily "new" contact 
+    message_type: 
+      0 for reply 
+      1 for query 
+      2 for everything else  
+  """
+  def add_contact(self, sender_id, ip, port, message_type):
+    node = Node(sender_id, ip, port)
 
-		# never add if the node ID is identical to our own ID  
-		if node.long_id == self.long_id:
-			return False 
+    # never add if the node ID is identical to our own ID  
+    if node.long_id == self.long_id:
+      return False 
 
-		index, bucket = self.find_bucket(node)
+    index, bucket = self.find_bucket(node)
 
-		# Remove a known bad node 
-		for n in bucket.nodes:
-			if not n.good_node():
-				bucket.remove_node(n)
-				log ("Node ", n.long_id, " gets removed. ", 
-							n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
-				break 
+    # Remove a known bad node 
+    for n in bucket.nodes:
+      if not n.good_node():
+        bucket.remove_node(n)
+        log ("Node ", n.long_id, " gets removed. ", 
+              n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
+        break 
 
-		if bucket.add_node(node, message_type):
-			return True 
-	
-		# New node and bucket full of good nodes 
+    if bucket.add_node(node, message_type):
+      return True 
+  
+    # New node and bucket full of good nodes 
 
-		# if table's owner node is in the bucket, split 
-		if bucket.in_range(self.long_id):
-			self.split_bucket(index, bucket)
-			# try adding again 
-			self.add_contact(sender_id, ip, port, message_type)
-		else: 
-			for n in bucket.nodes:
-				# find a dubious node to Ping 
-				if n.pinged >= 3 and n.last_pinged < getruntime() - 15:
-					log ("Node ", n.long_id, " gets pinged.\n")
-					tid = make_tid("pn", 0)
-					# Ping that node 
-					self.rpc.ping(n.ip, n.port, tid, 4)
-					n.pinged += 1 
-					n.last_pinged = getruntime()
-					break 
-			# add to bucket's replacement list if there's space left 
-			if len(bucket.replacements) < self.ksize:
-				bucket.add_replacement(node, message_type)
-		return False 
+    # if table's owner node is in the bucket, split 
+    if bucket.in_range(self.long_id):
+      self.split_bucket(index, bucket)
+      # try adding again 
+      self.add_contact(sender_id, ip, port, message_type)
+    else: 
+      for n in bucket.nodes:
+        # find a dubious node to Ping 
+        if n.pinged >= 3 and n.last_pinged < getruntime() - 15:
+          log ("Node ", n.long_id, " gets pinged.\n")
+          tid = make_tid("pn", 0)
+          # Ping that node 
+          self.rpc.ping(n.ip, n.port, tid, 4)
+          n.pinged += 1 
+          n.last_pinged = getruntime()
+          break 
+      # add to bucket's replacement list if there's space left 
+      if len(bucket.replacements) < self.ksize:
+        bucket.add_replacement(node, message_type)
+    return False 
 
-	def bootstrap_node(self, id, ip, port):
-		n = Node(id, ip, port)
-		return self.add_contact(id, ip, port, 2)
+  def bootstrap_node(self, id, ip, port):
+    n = Node(id, ip, port)
+    return self.add_contact(id, ip, port, 2)
 
-	def get_all_nodes(self):
-		nodes = list()
-		for b in self.buckets:
-			nodes += b.get_nodes()
-		return nodes 
+  def get_all_nodes(self):
+    nodes = list()
+    for b in self.buckets:
+      nodes += b.get_nodes()
+    return nodes 
 
-	# get buckets that haven't been queried in the 10 minutes (to refresh)
-	def get_unvisited_buckets(self):
-		return [b for b in self.buckets if getruntime() - b.last_changed >= 600]
+  # get buckets that haven't been queried in the 10 minutes (to refresh)
+  def get_unvisited_buckets(self):
+    return [b for b in self.buckets if getruntime() - b.last_changed >= 600]
 
-	def refresh_buckets(self):
-		buckets = self.get_unvisited_buckets()
-		if len(buckets) == 0:
-			return False 
+  def refresh_buckets(self):
+    buckets = self.get_unvisited_buckets()
+    if len(buckets) == 0:
+      return False 
 
-		for b in buckets:
-			random_id = b.random_id()
-			# if bucket empty, try fill it from neighboring buckets 
-			q = b 
-			if b.node_count() == 0:
-				n = self.buckets.index(b)
-				# either go with the previous or next bucket 
-				if n > 0:
-					q = self.buckets[n-1]
-				elif n < len(self.buckets):
-					q = self.buckets[n+1]
+    for b in buckets:
+      random_id = b.random_id()
+      # if bucket empty, try fill it from neighboring buckets 
+      q = b 
+      if b.node_count() == 0:
+        n = self.buckets.index(b)
+        # either go with the previous or next bucket 
+        if n > 0:
+          q = self.buckets[n-1]
+        elif n < len(self.buckets):
+          q = self.buckets[n+1]
 
-			if q.node_count > 0:
-				n = q.random_node()
-				tid = make_tid("fn", 10)
-				log ("Sending find_node for bucket refresh.\n")
-				self.rpc.find_node(tid, 4, random_id)
-				self.pinged(n, q)
-				return True 
-		return False 
+      if q.node_count > 0:
+        n = q.random_node()
+        tid = make_tid("fn", 10)
+        log ("Sending find_node for bucket refresh.\n")
+        self.rpc.find_node(tid, 4, random_id)
+        self.pinged(n, q)
+        return True 
+    return False 
 
-	def find_node(self, target_id):
-		i, bucket = self.find_bucket(target_id)
-		for n in bucket.get_nodes():
-			if n.id == target_id:
-				return n 
-		return None 
+  def find_node(self, target_id):
+    i, bucket = self.find_bucket(target_id)
+    for n in bucket.get_nodes():
+      if n.id == target_id:
+        return n 
+    return None 
 
-	# find proper bucket for contact (id in bucket's range)
-	# return index and the bucket itself 
-	def find_bucket(self, *args):
-		arg = args[0]
-		if not (isinstance(arg, Node) or isinstance(arg, (int, long))):
-			raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % 
-												type(arg))
-		for b in self.buckets:
-			if b.in_range(arg):
-				return self.buckets.index(b), b
+  # find proper bucket for contact (id in bucket's range)
+  # return index and the bucket itself 
+  def find_bucket(self, *args):
+    arg = args[0]
+    if not (isinstance(arg, Node) or isinstance(arg, (int, long))):
+      raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % 
+                        type(arg))
+    for b in self.buckets:
+      if b.in_range(arg):
+        return self.buckets.index(b), b
 
-		raise ValueError("Node ID not in range: 0 - 2**160")
+    raise ValueError("Node ID not in range: 0 - 2**160")
 
-	def insert_closest_node(self, nodes_list, target_id, node):
-		i = 0 
-		while i < len(nodes_list):
-			i_id = nodes_list[i][:20]
-			# if node info is already in nodes_list, return 
-			if node.id == i_id:
-				return nodes_list 
-			if compare_distance(target_id, node.long_id, string_to_long(i_id)) < 0:
-				break 
-			i += 1 
-		# if list is full, return 
-		if i >= self.ksize:
-			return nodes_list
-		# otherwise construct and add to list 
-		# Note: both ip & port needs to be "compact" and in network byte order 
-		packed_ip = ip_as_bytes(node.ip)
-		# convert port to network order 
-		network_order_port = str(htons(node.port)) 
-		nodes_list.insert(i, node.id + packed_ip + network_order_port)
+  def insert_closest_node(self, nodes_list, target_id, node):
+    i = 0 
+    while i < len(nodes_list):
+      i_id = nodes_list[i][:20]
+      # if node info is already in nodes_list, return 
+      if node.id == i_id:
+        return nodes_list 
+      if compare_distance(target_id, node.long_id, string_to_long(i_id)) < 0:
+        break 
+      i += 1 
+    # if list is full, return 
+    if i >= self.ksize:
+      return nodes_list
+    # otherwise construct and add to list 
+    # Note: both ip & port needs to be "compact" and in network byte order 
+    packed_ip = ip_as_bytes(node.ip)
+    # convert port to network order 
+    network_order_port = str(htons(node.port)) 
+    nodes_list.insert(i, node.id + packed_ip + network_order_port)
 
-		while len(nodes_list) > self.ksize:
-			nodes_list.pop()
+    while len(nodes_list) > self.ksize:
+      nodes_list.pop()
 
-		return nodes_list 
+    return nodes_list 
 
-	# Get the strictly closest good nodes to a given target ID (for sending response)
-	# IMPORTANT: target_ids are INTs! 
-	def get_closest_good_nodes(self, target_id):
-		nodes_list = list()
-		# linear scan through the routing table, and add to lookup list 
-		for b in self.buckets:
-			for n in b.get_nodes():
-				if n.good_node():
-					nodes_list = self.insert_closest_node(nodes_list, target_id, n)
-		log (len(nodes_list) , " nodes in nodes_list.\n")
-		return nodes_list 
+  # Get the strictly closest good nodes to a given target ID (for sending response)
+  # IMPORTANT: target_ids are INTs! 
+  def get_closest_good_nodes(self, target_id):
+    nodes_list = list()
+    # linear scan through the routing table, and add to lookup list 
+    for b in self.buckets:
+      for n in b.get_nodes():
+        if n.good_node():
+          nodes_list = self.insert_closest_node(nodes_list, target_id, n)
+    log (len(nodes_list) , " nodes in nodes_list.\n")
+    return nodes_list 
 
-	# Might just need to scan the whole routing table to find STRICTLY closest 
-	# (above get_closest_nodes function)
-	def get_lookup_nodes(self, lookup, target_id):
+  # Might just need to scan the whole routing table to find STRICTLY closest 
+  # (above get_closest_nodes function)
+  def get_lookup_nodes(self, lookup, target_id):
 
-		# find the bucket and add its nodes 
-		current_index, current_bucket = self.find_bucket(target_id)
-		self.add_to_lookup(current_bucket, lookup)
+    # find the bucket and add its nodes 
+    current_index, current_bucket = self.find_bucket(target_id)
+    self.add_to_lookup(current_bucket, lookup)
 
-		left_index = current_index - 1  
-		right_index = current_index + 1 
-		go_left = True 
+    left_index = current_index - 1  
+    right_index = current_index + 1 
+    go_left = True 
 
-		# while lookup list is not full and there are still buckets we haven't been, 
-		# add from neighboring buckets in the order: left, right, left, etc 
-		while not lookup.is_full() and (left_index > 0 or right_index < len(self.buckets)):
-			if left_index >= 0 and go_left:
-				previous_bucket = self.buckets[left_index]
-				self.add_to_lookup(previous_bucket, lookup)
-				left_index -= 1 
-				go_left = False 
+    # while lookup list is not full and there are still buckets we haven't been, 
+    # add from neighboring buckets in the order: left, right, left, etc 
+    while not lookup.is_full() and (left_index > 0 or right_index < len(self.buckets)):
+      if left_index >= 0 and go_left:
+        previous_bucket = self.buckets[left_index]
+        self.add_to_lookup(previous_bucket, lookup)
+        left_index -= 1 
+        go_left = False 
 
-			if current_index < len(self.buckets):
-				next_bucket = self.buckets[right_index]
-				self.add_to_lookup(next_bucket, lookup)
-				right_index += 1 
-				go_left = True 
+      if current_index < len(self.buckets):
+        next_bucket = self.buckets[right_index]
+        self.add_to_lookup(next_bucket, lookup)
+        right_index += 1 
+        go_left = True 
 
-		# Note: closest in this list at head 
-		return lookup
+    # Note: closest in this list at head 
+    return lookup
 
-	def add_to_lookup(self, bucket, lookup):
-		nodes = bucket.get_nodes()
-		for n in nodes:
-			lookup.insert(n.id, n.ip, n.port) 
+  def add_to_lookup(self, bucket, lookup):
+    nodes = bucket.get_nodes()
+    for n in nodes:
+      lookup.insert(n.id, n.ip, n.port) 
 
 
-	def pinged(self, node, bucket=None):
-		node.pinged += 1 
-		node.last_pinged = getruntime()
-		if node.pinged >= 3:
-			if bucket:
-				self.ping_replacement(bucket)
-			else:
-				self.ping_replacement(self.find_bucket(node)[1])
+  def pinged(self, node, bucket=None):
+    node.pinged += 1 
+    node.last_pinged = getruntime()
+    if node.pinged >= 3:
+      if bucket:
+        self.ping_replacement(bucket)
+      else:
+        self.ping_replacement(self.find_bucket(node)[1])
 
-	def ping_replacement(self, bucket):
-		tid = make_tid("pn", 0)
-		if len(bucket.replacements) > 0:
-			top = bucket.replacements[-1]
-			log ("Sending ping to replacement node.\n")
-			self.rpc.ping(top.ip, top.port, tid, 4)
+  def ping_replacement(self, bucket):
+    tid = make_tid("pn", 0)
+    if len(bucket.replacements) > 0:
+      top = bucket.replacements[-1]
+      log ("Sending ping to replacement node.\n")
+      self.rpc.ping(top.ip, top.port, tid, 4)
 
-	def __str__(self):
-		output = ""
-		for b in self.buckets:
-			output += "----------\n" + str(b) + "\n"
-		return output 
+  def __str__(self):
+    output = ""
+    for b in self.buckets:
+      output += "----------\n" + str(b) + "\n"
+    return output 
