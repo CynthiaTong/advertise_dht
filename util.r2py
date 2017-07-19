@@ -1,12 +1,11 @@
-dy_import_module_symbols("time.r2py")
-dy_import_module_symbols("sha.r2py")
-dy_import_module_symbols("random.r2py")
+time = dy_import_module("time.r2py")
+sha = dy_import_module("sha.r2py")
+random = dy_import_module("random.r2py")
 
-timeport = list(getresources()[0]["connport"])[0]
-time_updatetime(timeport)
+LID_BIT_SIZE = 16 
 
-def get_time():
-  return time_gettime()
+def make_lid():
+  return random.random_nbit_int(LID_BIT_SIZE)
 
 # 4-byte transaction id string  
 def make_tid(prefix, sequence):
@@ -14,7 +13,7 @@ def make_tid(prefix, sequence):
   for n in prefix:
     output += chr(ord(n) & 0xFF) 
   binary_seq = "{0:b}".format(sequence)[:16] # get the first 16 bits (2 bytes) of the integer 
-  output += str(int(binary_seq, 2))
+  output += htons(int(binary_seq, 2))
   # output += str(sequence)[:2]
   # log(output, "\n")
   # return a character / int list 
@@ -37,28 +36,24 @@ def rotate_secret(secret=None):
   if secret:
     old_secret = str(secret)
 
-  secret = random_randombytes(SECRET_SIZE)
+  secret = random.random_randombytes(SECRET_SIZE)
   rotate_secret_time = getruntime() + ROTATE_SECRET_INTERVAL 
 
   return (old_secret, secret, rotate_secret_time)
 
 # 16 byte token 
 def make_token(ip, secret):
-  return sha_hash(str(ip) + secret)
+  return sha.sha_hash(str(ip) + secret)
 
 def token_match(token, ip, old_secret, secret):
   if old_secret:
-    old_hash = sha_hash(str(ip) + old_secret)
+    old_hash = sha.sha_hash(str(ip) + old_secret)
     if old_hash == token: return True 
   if secret:
-    now_hash = sha_hash(str(ip) + secret)
+    now_hash = sha.sha_hash(str(ip) + secret)
     if now_hash == token: return True 
 
   return False 
-
-LID_BIT_SIZE = 16 
-def make_lid():
-  return random_nbit_int(LID_BIT_SIZE)
 
 # Converts 20 bytes into a long number
 def string_to_long(data):
@@ -86,9 +81,44 @@ def htons(num):
   if (num.bit_length() + 7) // 8 == 2:
     n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
     # log (n, "\n")
-    return _random_long_to_bytes(n)
-  log ("htons: integer is not 2 bytes.\n")
+    return int_to_bytes(n)
+  raise Exception("htons: integer is not 2 bytes.\n")
   return -1 
+
+def int_to_bytes(long_int):
+  """
+  <Purpose>
+    Convert a long integer to a byte string.
+    Used by random_randombytes to convert integers recovered
+    from random floats into its byte representation.
+    Used by random_randombytes, random_randombytes is responsible
+    for padding any required binary zeroes that are lost in the
+    conversion process.
+  """
+
+  long_int = long(long_int)
+  byte_string = ''
+  temp_int = 0
+
+  # Special case to ensure that a non-empty string
+  # is always returned.
+  if long_int == 0:
+    return '\000'
+
+  while long_int > 0:
+    # Use a bitwise AND to get the last 8 bits from the long.
+    #    long_int  -->   1010... 010000001 (base 2)
+    #    0xFF      -->            11111111
+    #              _______________________
+    #  Bitwise AND result -->     10000001
+    tmp_int = long_int & 0xFF
+    # Place the new character at the front of the string.
+    byte_string = "%s%s" % (chr(tmp_int), byte_string)
+    # Bitshift the long because the trailing 8 bits have just been read.
+    long_int = long_int >> 8
+
+  return byte_string
+
 
 def bytes_to_int(bytes):
   n = 0
@@ -266,3 +296,11 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
   else:
     return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
             token, token_len, nodes, nodes_len, values, values_len)
+
+
+def invalid_address(ip, port):
+    # log (ip, ": ", port, "\n")
+    ip_list = [int(n) for n in ip.split(".")]
+    if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
+      return True 
+    return False  
