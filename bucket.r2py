@@ -26,10 +26,15 @@ class Bucket:
 			return self.min <= arg <= self.max 
 
 	def add_node(self, node, message_type=None):
-		if node in self.nodes:
+		duplicates = None 
+		for n in self.nodes:
+			if n.ip == node.ip and n.port == node.port:
+				duplicates = n		
+		if duplicates:
 			# move existing node to tail
-			self.nodes.remove(node)
-			self.nodes.append(node)
+			self.nodes.remove(duplicates)
+			self.nodes.append(duplicates)
+			node = duplicates
 		elif len(self.nodes) < self.ksize:
 			self.nodes.append(node)
 		# New node and bucket full 
