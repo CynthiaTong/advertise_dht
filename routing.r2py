@@ -88,6 +88,12 @@ class RoutingTable:
 		n = Node(id, ip, port)
 		return self.add_contact(id, ip, port, 2)
 
+	def get_all_nodes(self):
+		nodes = list()
+		for b in self.buckets:
+			nodes += b.get_nodes()
+		return nodes 
+
 	# get buckets that haven't been queried in the 10 minutes (to refresh)
 	def get_unvisited_buckets(self):
 		return [b for b in self.buckets if getruntime() - b.last_changed >= 600]
@@ -111,7 +117,7 @@ class RoutingTable:
 
 			if q.node_count > 0:
 				n = q.random_node()
-				tid = make_tid("fn", 0)
+				tid = make_tid("fn", 10)
 				log ("Sending find_node for bucket refresh.\n")
 				self.rpc.find_node(tid, 4, random_id)
 				self.pinged(n, q)

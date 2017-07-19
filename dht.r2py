@@ -32,7 +32,7 @@ class DHT:
 
 	def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
 
-		if len(buf) > 0:
+		if buf and len(buf) > 0:
 			if self.invalid_address(source_ip, source_port):
 				return self.periodic()
 
@@ -40,7 +40,7 @@ class DHT:
 			if msg == -1:
 				return self.periodic()
 
-			log (msg, "\n")
+			# log (msg, "\n")
 			(msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
 			nodes, nodes_len, values, values_len) = msg 
 
@@ -59,9 +59,9 @@ class DHT:
 			## Rate control ?? 
 
 			if msg_type == "REPLY":
-				if not tid_len == 4:
-					log ("Broken tid:\n", buf, "\n")
-					return self.periodic()
+				# if not tid_len == 4:
+				# 	log ("Broken tid:\n", buf, "\n")
+				# 	return self.periodic()
 
 				if tid_match(tid, "pn"):
 					log ("Pong!\n")
@@ -69,6 +69,7 @@ class DHT:
 
 				elif tid_match(tid, "gp") or tid_match(tid, "fn"):
 					lids = (tid_match(tid, "gp") , tid_match(tid, "fn"))
+					# log ("LIDS: ", lids, "\n")
 					# try to find among existing lookups by searching lid 
 					for lid in lids:
 						if lid:
@@ -83,7 +84,7 @@ class DHT:
 							else: # nodes_len normal & existing lookup - it's a proper reply 
 								self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
 								i = 0 
-								while i < nodes_len:
+								while i <= nodes_len - 26:
 									n = nodes[i:i+26]
 									# convert id, ip and port to host order and readable format 
 									n_id = ""
@@ -97,15 +98,17 @@ class DHT:
 
 									n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
 									i += 26 
-									log (n_id, "\t", n_ip, ": ", n_port, "\n")
+									log (n_ip, ": ", n_port, "\n")
 									if n_id == self.id:
 										continue;
 									self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
 									# insert into the corresponding lookup  
 									lookup.insert(n_id, n_ip, n_port)
-								# since we got a reply, send out another round of lookups 
+								# since we got a reply, send out another lookup request 
 								self.lookups.lookup_get_peers(lookup)
+								# 1 means this node has replied 
 								lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
+								log ("--------- LOOKUP ---------\n", str(lookup), "\n")
 
 					if values_len > 0 and lids[0]:
 						log ("Got %d values!\n" % (values_len/6))
@@ -142,10 +145,11 @@ class DHT:
 								n.acked = 1 
 								n.pinged = 0 
 								break 
-							self.lookups.lookup_get_peers(lookup)
+
+						self.lookups.lookup_get_peers(lookup)
 
 				else:
-					log ("Unexpected reply: \n%s (%d)\n" % buf, len(buf))
+					log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
 
 			elif msg_type == "PING":
 				log ("Ping!\n")
@@ -200,7 +204,8 @@ class DHT:
 
 	def invalid_address(self, ip, port):
 		# log (ip, ": ", port, "\n")
-		if port == 0 or ip[0] == "0" or ip[:3] == "127" or int(ip[:3]) > 224:
+		ip_list = [int(n) for n in ip.split(".")]
+		if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
 			return True 
 		return False 	
 
@@ -217,9 +222,10 @@ class DHT:
 
 		if 0 < self.lookups.lookup_time <= getruntime():
 			# execute the lookups 
-			for l in self.lookups:
-				if not l.done and l.step_time <= getruntime() - 5:
-					self.lookups.lookup_step(l, callback)
+			if len(self.lookups) > 0:
+				for l in self.lookups:
+					if not l.done and l.step_time <= getruntime() - 5:
+						self.lookups.lookup_step(l, callback)
 
 			# increase lookup_time for next rounds of steps 
 			self.lookups.lookup_time = 0 
@@ -251,5 +257,5 @@ class DHT:
 		return True 
 
 	def ping_node(self, ip, port):
-		tid = make_tid("pn", 0)
+		tid = make_tid("pn", 10)
 		return self.rpc.ping(ip, port, tid, 4)

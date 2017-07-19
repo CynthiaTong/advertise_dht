@@ -4,11 +4,11 @@ dy_import_module_symbols("util.r2py")
 
 LOOKUP_CAPACITY = 14 
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
-DHT_MAX_LOOKUPS = 1024 # why?
+DHT_MAX_LOOKUPS = 1024 
 DHT_EVENT_LOOKUPS_DONE = 3 
 BUF_SIZE = 512 #BYTES 
 LARGE_BUF_SIZE = 2048 
-# Question: my_v ??
+
 
 class RPC:
 	def __init__(self, string_id, routing_table=None):
@@ -18,14 +18,15 @@ class RPC:
 
 	def send(self, buf, target_ip, target_port):
 		# for debugging 
-		# target_ip = "172.16.29.118"
-		# target_port = 63101
+		# target_ip = getmyip()
+		# target_port = 6881 
 		log ("Sending msg to %s : %d\n" % (target_ip, target_port))
 
 		ip = getmyip()
-		port = 63102 	# range: 63100, 63201
+		port = 63101 	# range: 63100, 63201
 
 		sendmessage(target_ip, target_port, buf, ip, port)
+
 
 	"""
 		QUERY METHODS 
@@ -33,7 +34,7 @@ class RPC:
 	def ping(self, ip, port, tid, tid_len):
 		buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self.id, tid_len, tid)
 		if len(buf) <= BUF_SIZE:
-			log (buf, "\n")
+			# log (buf, "\n")
 			return self.send(buf, ip, port)
 
 	def find_node(self, ip, port, tid, tid_len, target_id):
@@ -48,7 +49,7 @@ class RPC:
 		buf = ("d1:ad2:id20:%s9:info_hash20:%se1:q9:get_peers1:t%d:%s1:y1:qe" % 
 					(self.id, info_hash, tid_len, tid))
 		if len(buf) <= BUF_SIZE:
-			log (buf, "\n")
+			# log (buf, "\n")
 			return self.send(buf, ip, port)
 
 	def announce_peer(self, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len):
