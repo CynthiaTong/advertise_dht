@@ -1,10 +1,13 @@
 dy_import_module_symbols("dht.r2py")
-dy_import_module_symbols("random.r2py")
-
 
 peers = [("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881), ("router.utorrent.com", 6881)]
 ip = getmyip()
 port = 63101
+timeout = 1000	# for testing, set it to be a large number 
+
+class DHTNoResponseError(Exception):
+	""" Error starting up the DHT """
+
 
 def setup(my_id):
 	createthread(listen)
@@ -16,29 +19,35 @@ def setup(my_id):
 			# ping_node is the "hard" way to bootstrap - it actually sends messages to the pinged node 
 			# if we don't have anything in the peersfile yet, use this  
 			mycontext["dht"].ping_node(ip, port)
+
 			sleep(0.05)
-			break
+			# break			### to be removed 
+
+		# mycontext["dht"].ping_node("172.16.46.87", port)
 
 	except Exception, e:
 		log ("Failed to initialize DHT. " + str(e) + "\n")
 
 	sleep(2)
 
-	nodes = mycontext["dht"].router.get_all_nodes()
+	# nodes = mycontext["dht"].router.get_all_nodes()
+	# log (nodes, "\n")
 	mycontext["dht"].lookups.dht_lookup(my_id, 0, callback)		# lookup my_id 
-
 	# refresh buckets 
 	mycontext["dht"].router.refresh_buckets()
 
 
 def listen():
+	starttime = getruntime()
+
 	ip = getmyip()
 	port = 63101	 # range: 63100, 63201
-	udpserversocket = listenformessage(ip, port)
 
-	while True:
+	udpresponsesocket = listenformessage(ip, port)
+
+	while getruntime() < starttime + timeout:
 	  try:	
-	    remoteip, remoteport, message = udpserversocket.getmessage()
+	    remoteip, remoteport, message = udpresponsesocket.getmessage()
 	    log ("=========================\nGot message! \n", 
 	    			remoteip, ": ", remoteport, "\n", message, 
 	    			"\n-------------------------\n")
@@ -49,6 +58,10 @@ def listen():
 	    sleep(0.1)
 	  except SocketClosedLocal:
 	    break
+
+	udpresponsesocket.close()
+	raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
+
 
 
 def callback(EVENT, id, data=None, data_len=0):
