@@ -48,8 +48,14 @@ class Bucket:
 
 	def add_replacement(self, node, message_type):
 		# if the node exists in replacements, move it to tail (top)
-		if node in self.replacements:
-			self.replacements.remove(node)
+		duplicates = None 
+		for n in self.replacements:
+			if n.ip == node.ip and n.port == node.port:
+				duplicates = n	
+				break 	
+		if duplicates:
+			self.replacements.remove(duplicates)
+			node = duplicates
 		self.replacements.append(node)
 		self.update_time_info(node, message_type)
 	
