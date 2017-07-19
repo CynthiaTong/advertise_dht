@@ -1,8 +1,11 @@
-dy_import_module_symbols("routing.r2py")
-dy_import_module_symbols("rpc.r2py")
-dy_import_module_symbols("lookup.r2py")
-dy_import_module_symbols("storage.r2py")
-dy_import_module_symbols("util.r2py")
+node = dy_import_module("node.r2py")
+routing = dy_import_module("routing.r2py")
+rpc = dy_import_module("rpc.r2py")
+lookup = dy_import_module("lookup.r2py")
+storage = dy_import_module("storage.r2py")
+util = dy_import_module("util.r2py")
+random = dy_import_module("random.r2py")
+
 
 DHT_EVENT_NONE = 0
 DHT_EVENT_VALUES = 1
@@ -16,16 +19,13 @@ class DHT:
 
   def __init__(self, dht_id):
     self.id = dht_id
-    self.long_id = string_to_long(self.id)
+    self.long_id = util.string_to_long(self.id)
 
-    self.rpc = RPC(self.id)
-    self.router = RoutingTable(self.id, K_SIZE, self.rpc) 
-    self.rpc.router = self.router
-
-    self.lookups = DHT_Lookup(self.id, self.router, self.rpc)
-    self.storage = Storage(self.id) 
-    self.secret_package = rotate_secret() 
-    self.refresh_buckets_time = getruntime() + random_int_below(3)
+    self.router = routing.RoutingTable(self.id, K_SIZE) 
+    self.lookups = lookup.DHTLookup(self.id, self.router)
+    self.storage = storage.Storage(self.id) 
+    self.secret_package = util.rotate_secret() 
+    self.refresh_buckets_time = getruntime() + random.random_int_below(3)
 
     # bucket_grow_time for mybucket maintenance? 
     # token_bucket_time for rate control?
@@ -33,10 +33,10 @@ class DHT:
   def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
 
     if buf and len(buf) > 0:
-      if invalid_address(source_ip, source_port):
+      if util.invalid_address(source_ip, source_port):
         return self.periodic()
 
-      msg = parse_message(buf)
+      msg = util.parse_message(buf)
       if msg == -1:
         return self.periodic()
 
@@ -48,7 +48,7 @@ class DHT:
       values_len = int(values_len)
       token_len= int(token_len)
 
-      if msg_type == "ERROR" or string_to_long(sender_id) == 0:
+      if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
         log ("Faulty message - unparseable: \n", buf, "\n")
         return self.periodic()
 
@@ -63,12 +63,12 @@ class DHT:
           log ("Broken tid:\n", buf, "\n")
           return self.periodic()
 
-        if tid_match(tid, "pn"):
+        if util.tid_match(tid, "pn"):
           log ("Pong!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
 
-        elif tid_match(tid, "gp") or tid_match(tid, "fn"):
-          lids = (tid_match(tid, "gp") , tid_match(tid, "fn"))
+        elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
+          lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
           # log ("LIDS: ", lids, "\n")
           # try to find among existing lookups by searching lid 
           for lid in lids:
@@ -96,7 +96,7 @@ class DHT:
                     ip_strs.append(str(x))
                   n_ip = ".".join(ip_strs)
 
-                  n_port = bytes_to_int(n[24:])  # convert port bytes back to an integer
+                  n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
                   i += 26 
                   log (n_ip, ": ", n_port, "\n")
                   if n_id == self.id:
@@ -122,16 +122,16 @@ class DHT:
                 ip_strs.append(str(x))
               v_ip = ".".join(ip_strs)
 
-              v_port = bytes_to_int(v[4:])  # convert port bytes back to an integer
+              v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
               i += 6
               filtered_values.append((v_ip, v_port))
               log (v_ip, ": ", v_port, "\n")
             if callback:
               return callback(DHT_EVENT_VALUES, lookup.target_id, filtered_values, len(filtered_values))
 
-        elif tid_match(tid, "ap"):  
+        elif util.tid_match(tid, "ap"):  
           log ("Got reply to announce_peer!\n")
-          lid = tid_match(tid, "ap")
+          lid = util.tid_match(tid, "ap")
           lookup = self.lookups.find_lookup_by_tid(lid) 
           if lookup == None:
             log ("Unknown lookup!\n")
@@ -156,57 +156,57 @@ class DHT:
         log ("Ping!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         log ("Sending pong.\n")
-        self.rpc.pong(source_ip, source_port, tid, tid_len)
+        rpc.pong(self.id, source_ip, source_port, tid, tid_len)
 
       elif msg_type == "FIND_NODE":
         log ("Find node!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         log ("Sending closest node to find_node req.\n")
-        self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, target)
+        rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target)
 
       elif msg_type == "GET_PEERS":
         log ("Get peers!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         if string_to_long(info_hash) == 0:
           log ("Got get_peers with no info_hash\n")
-          self.rpc.send_error(source_ip, source_port, tid, tid_len, 
+          rpc.send_error(source_ip, source_port, tid, tid_len, 
                               203, "Get_peers with no infohash.")
         else:
           peers_list = self.storage.retrieve(info_hash)
           token = make_token(source_ip, self.secret_package[1])
           if peers_list:
             log ("Sending found peers.\n")
-            self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash, 
+            rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
                                         token, TOKEN_SIZE, peers_list)
           else:
             log ("Sending nodes for get_peers.\n")
-            self.rpc.send_closest_nodes(source_ip, source_port, tid, tid_len, info_hash)
+            rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash)
 
       elif msg_type == "ANNOUNCE_PEER":
         log ("Announce peer!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        if string_to_long(info_hash) == 0:
+        if util.string_to_long(info_hash) == 0:
           log ("Got announce_peer with no info_hash\n")
-          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-                              203, "Announce_peer with no infohash.")   
+          return rpc.send_error(source_ip, source_port, tid, tid_len, 
+                                203, "Announce_peer with no infohash.")   
         if port == 0:
           log ("Got announce_peer with port 0\n")
-          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-                              203, "Announce_peer with forbidden port number.")   
-        if not token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
+          return rpc.send_error(source_ip, source_port, tid, tid_len, 
+                                203, "Announce_peer with forbidden port number.")   
+        if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
           log ("Got announce_peer with invalid token\n")
-          return self.rpc.send_error(source_ip, source_port, tid, tid_len, 
-                              203, "Announce_peer with invalid token.") 
+          return rpc.send_error(source_ip, source_port, tid, tid_len, 
+                                203, "Announce_peer with invalid token.") 
 
         self.storage.store(sender_id, source_ip, source_port)
         log ("Sending peer announced.\n")
-        self.rpc.peer_announced(source_ip, source_port, tid, tid_len)
+        rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len)
 
   def periodic(self):
     log ("do periodic stuff.\n")
     # if now > rotate_secret_time 
     if getruntime() >= self.secret_package[2]: 
-      rotate_secret(self.secret_package[1])
+      util.rotate_secret(self.secret_package[1])
 
     if getruntime() >= self.router.expire_stuff_time:
       self.router.expire_buckets()
@@ -224,16 +224,16 @@ class DHT:
       self.lookups.lookup_time = 0 
       for l in self.lookups:
         if not l.done:
-          l_time = l.step_time + 15 + random_int_below(10)
+          l_time = l.step_time + 15 + util.random_int_below(10)
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
 
     if self.refresh_buckets_time <= getruntime():
       refreshed = self.router.refresh_buckets()
       if refreshed:
-        self.refresh_buckets_time = getruntime() + 5 + random_int_below(20)   # next refresh in < 25 seconds 
+        self.refresh_buckets_time = getruntime() + 5 + util.random_int_below(20)   # next refresh in < 25 seconds 
       else:
-        self.refresh_buckets_time = getruntime() + 60 + random_int_below(120)   # next refresh in 1 - 3 min 
+        self.refresh_buckets_time = getruntime() + 60 + util.random_int_below(120)   # next refresh in 1 - 3 min 
 
     refresh_interval = self.refresh_buckets_time - getruntime()
     if refresh_interval > 0:
@@ -250,5 +250,5 @@ class DHT:
     return True 
 
   def ping_node(self, ip, port):
-    tid = make_tid("pn", make_lid())
-    return self.rpc.ping(ip, port, tid, len(tid))
+    tid = util.make_tid("pn", util.make_lid())
+    return rpc.ping(self.id, ip, port, tid, len(tid))

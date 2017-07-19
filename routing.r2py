@@ -1,22 +1,19 @@
-dy_import_module_symbols("node.r2py")
-dy_import_module_symbols("bucket.r2py")
-dy_import_module_symbols("lookup.r2py")
-dy_import_module_symbols("rpc.r2py")
-dy_import_module_symbols("util.r2py")
-dy_import_module_symbols("random.r2py")
+node = dy_import_module("node.r2py")
+bucket = dy_import_module("bucket.r2py")
+util = dy_import_module("util.r2py")
+rpc = dy_import_module("rpc.r2py")
+
 
 class RoutingTable:
-
-  def __init__(self, string_id, ksize, rpc=None):
+  def __init__(self, string_id, ksize):
     self.id = string_id
-    self.long_id = string_to_long(string_id)
+    self.long_id = util.string_to_long(string_id)
     self.ksize = ksize 
     self.expire_stuff_time = 0  
     self.initial_bucket()
-    self.rpc = rpc 
 
   def initial_bucket(self):
-    self.buckets = [Bucket(0, 2**160, self.ksize)]
+    self.buckets = [bucket.Bucket(0, 2**160, self.ksize)]
 
   def split_bucket(self, index, bucket):
     self.ping_replacement(bucket)
@@ -32,7 +29,7 @@ class RoutingTable:
           b.remove_node(n)
           # ping a replacement node 
           self.ping_replacement(b)
-          self.expire_stuff_time = getruntime() + 120 + random_int_below(240)
+          self.expire_stuff_time = getruntime() + 120 + random.random_int_below(240)
 
   """
     not necessarily "new" contact 
@@ -42,13 +39,17 @@ class RoutingTable:
       2 for everything else  
   """
   def add_contact(self, sender_id, ip, port, message_type):
-    node = Node(sender_id, ip, port)
+
+    new_node = node.Node(sender_id, ip, port)
 
     # never add if the node ID is identical to our own ID  
-    if node.long_id == self.long_id:
+    if sender_id == self.id:
       return False 
 
-    index, bucket = self.find_bucket(node)
+    if util.invalid_address(ip, port):
+      return False 
+
+    index, bucket = self.find_bucket(new_node)
 
     # Remove a known bad node 
     for n in bucket.nodes:
@@ -58,7 +59,7 @@ class RoutingTable:
               n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
         break 
 
-    if bucket.add_node(node, message_type):
+    if bucket.add_node(new_node, message_type):
       return True 
   
     # New node and bucket full of good nodes 
@@ -73,19 +74,19 @@ class RoutingTable:
         # find a dubious node to Ping 
         if n.pinged >= 3 and n.last_pinged < getruntime() - 15:
           log ("Node ", n.long_id, " gets pinged.\n")
-          tid = make_tid("pn", 0)
+          tid = util.make_tid("pn", util.make_lid())
           # Ping that node 
-          self.rpc.ping(n.ip, n.port, tid, 4)
+          rpc.ping(self.id, n.ip, n.port, tid, len(tid))
           n.pinged += 1 
           n.last_pinged = getruntime()
           break 
       # add to bucket's replacement list if there's space left 
       if len(bucket.replacements) < self.ksize:
-        bucket.add_replacement(node, message_type)
+        bucket.add_replacement(new_node, message_type)
     return False 
 
   def bootstrap_node(self, id, ip, port):
-    n = Node(id, ip, port)
+    n = node.Node(id, ip, port)
     return self.add_contact(id, ip, port, 2)
 
   def get_all_nodes(self):
@@ -116,10 +117,10 @@ class RoutingTable:
           q = self.buckets[n+1]
 
       if q.node_count > 0:
-        n = q.random_node()
-        tid = make_tid("fn", 10)
         log ("Sending find_node for bucket refresh.\n")
-        self.rpc.find_node(tid, 4, random_id)
+        n = q.random_node()
+        tid = util.make_tid("fn",  util.make_lid())
+        rpc.find_node(self.id, n.ip, n.port, tid, 4, random_id)
         self.pinged(n, q)
         return True 
     return False 
@@ -135,7 +136,7 @@ class RoutingTable:
   # return index and the bucket itself 
   def find_bucket(self, *args):
     arg = args[0]
-    if not (isinstance(arg, Node) or isinstance(arg, (int, long))):
+    if not (isinstance(arg, node.Node) or isinstance(arg, (int, long))):
       raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % 
                         type(arg))
     for b in self.buckets:
@@ -151,7 +152,7 @@ class RoutingTable:
       # if node info is already in nodes_list, return 
       if node.id == i_id:
         return nodes_list 
-      if compare_distance(target_id, node.long_id, string_to_long(i_id)) < 0:
+      if util.compare_distance(target_id, node.long_id, util.string_to_long(i_id)) < 0:
         break 
       i += 1 
     # if list is full, return 
@@ -159,9 +160,9 @@ class RoutingTable:
       return nodes_list
     # otherwise construct and add to list 
     # Note: both ip & port needs to be "compact" and in network byte order 
-    packed_ip = ip_as_bytes(node.ip)
+    packed_ip = util.ip_as_bytes(node.ip)
     # convert port to network order 
-    network_order_port = str(htons(node.port)) 
+    network_order_port = str(util.htons(node.port)) 
     nodes_list.insert(i, node.id + packed_ip + network_order_port)
 
     while len(nodes_list) > self.ksize:
@@ -227,11 +228,11 @@ class RoutingTable:
         self.ping_replacement(self.find_bucket(node)[1])
 
   def ping_replacement(self, bucket):
-    tid = make_tid("pn", 0)
+    tid = util.make_tid("pn", util.make_lid())
     if len(bucket.replacements) > 0:
       top = bucket.replacements[-1]
       log ("Sending ping to replacement node.\n")
-      self.rpc.ping(top.ip, top.port, tid, 4)
+      rpc.ping(self.id, top.ip, top.port, tid, len(tid))
 
   def __str__(self):
     output = ""

@@ -1,6 +1,4 @@
-dy_import_module_symbols("lookup.r2py")
-dy_import_module_symbols("routing.r2py")
-dy_import_module_symbols("util.r2py")
+util = dy_import_module("util.r2py")
 
 LOOKUP_CAPACITY = 14 
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
@@ -10,103 +8,97 @@ BUF_SIZE = 512 #BYTES
 LARGE_BUF_SIZE = 2048 
 
 
-class RPC:
-  def __init__(self, string_id, routing_table=None):
-    self.id = string_id 
-    self.router = routing_table
+def send(buf, target_ip, target_port):
+  # for debugging 
+  # target_ip = getmyip()
+  # target_port = 6881 
+  log ("Sending msg to %s : %d\n" % (target_ip, target_port))
 
+  ip = getmyip()
+  port = 63101  # range: 63100, 63201
 
-  def send(self, buf, target_ip, target_port):
-    # for debugging 
-    # target_ip = getmyip()
-    # target_port = 6881 
-    log ("Sending msg to %s : %d\n" % (target_ip, target_port))
+  sendmessage(target_ip, target_port, buf, ip, port)
 
-    ip = getmyip()
-    port = 63101  # range: 63100, 63201
+"""
+  QUERY METHODS 
+"""
+def ping(self_id, ip, port, tid, tid_len):
+  buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self_id, tid_len, tid)
+  if len(buf) <= BUF_SIZE:
+    # log (buf, "\n")
+    return send(buf, ip, port)
 
-    sendmessage(target_ip, target_port, buf, ip, port)
+def find_node(self_id, ip, port, tid, tid_len, target_id):
+  buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s1:y1:qe" % 
+        (self_id, target_id, tid_len, tid))
+  if len(buf) <= BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
 
+# no ipv6 support here 
+def get_peers(self_id, ip, port, tid, tid_len, info_hash): 
+  buf = ("d1:ad2:id20:%s9:info_hash20:%se1:q9:get_peers1:t%d:%s1:y1:qe" % 
+        (self_id, info_hash, tid_len, tid))
+  if len(buf) <= BUF_SIZE:
+    # log (buf, "\n")
+    return send(buf, ip, port)
 
-  """
-    QUERY METHODS 
-  """
-  def ping(self, ip, port, tid, tid_len):
-    buf = "d1:ad2:id20:%se1:q4:ping1:t%d:%s1:y1:qe" % (self.id, tid_len, tid)
-    if len(buf) <= BUF_SIZE:
-      # log (buf, "\n")
-      return self.send(buf, ip, port)
+def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len):
+  buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
+        (self_id, info_hash, lookup_port, token_len, token, tid_len, tid))
+  if len(buf) <= BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
 
-  def find_node(self, ip, port, tid, tid_len, target_id):
-    buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s1:y1:qe" % 
-          (self.id, target_id, tid_len, tid))
-    if len(buf) <= BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
+"""
+  REPLY METHODS 
+"""
+def pong(self_id, ip, port, tid, tid_len):
+  buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self_id, tid_len, tid)
+  if len(buf) <= BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
 
-  # no ipv6 support here 
-  def get_peers(self, ip, port, tid, tid_len, info_hash): 
-    buf = ("d1:ad2:id20:%s9:info_hash20:%se1:q9:get_peers1:t%d:%s1:y1:qe" % 
-          (self.id, info_hash, tid_len, tid))
-    if len(buf) <= BUF_SIZE:
-      # log (buf, "\n")
-      return self.send(buf, ip, port)
+def send_closest_nodes(router, self_id, ip, port, tid, tid_len, target_id_str, token=None, token_len=0, peers_list=None):
+  target_id_long = util.string_to_long(target_id_str)
+  nodes_list = router.get_closest_good_nodes(target_id_long)
+  nodes_str = ''.join(nodes_list)
+  nodes_len = len(nodes_list) * 26 
 
-  def announce_peer(self, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len):
-    buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s1:y1:qe" % 
-          (self.id, info_hash, lookup_port, token_len, token, tid_len, tid))
-    if len(buf) <= BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
+  return send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
 
-  """
-    REPLY METHODS 
-  """
-  def pong(self, ip, port, tid, tid_len):
-    buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
-    if len(buf) <= BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
+def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
+  buf = "d1:rd2:id20:%s" % self_id 
+  # add nodes string  
+  buf += "5:nodes%d:%s" % (nodes_len, nodes_str)
 
-  def send_closest_nodes(self, ip, port, tid, tid_len, target_id_str, token=None, token_len=0, peers_list=None):
-    target_id_long = string_to_long(target_id_str)
-    nodes_list = self.router.get_closest_good_nodes(target_id_long)
-    nodes_str = ''.join(nodes_list)
-    nodes_len = len(nodes_list) * 26 
+  if token_len > 0:
+    buf += "5:token%d:%s" % (token_len, token)
 
-    return self.send_nodes_peers(ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len)
+  if peers_list and len(peers_list) > 0:
+    buf += "6:valuesl"
+    for p in peers_list:
+      # !! port needs to be big endian 
+      buf += "%d:%s%s" % (6, util.ip_as_bytes(p.ip), str(util.htons(p.port)))
+      # log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
+    buf += "e"
+  buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
+  if len(buf) <= LARGE_BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
 
-  def send_nodes_peers(self, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len):
-    buf = "d1:rd2:id20:%s" % self.id 
-    # add nodes string  
-    buf += "5:nodes%d:%s" % (nodes_len, nodes_str)
+def peer_announced(self_id, ip, port, tid, tid_len):
+  buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self_id, tid_len, tid)
+  if len(buf) <= BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
 
-    if token_len > 0:
-      buf += "5:token%d:%s" % (token_len, token)
+def send_error(ip, port, tid, tid_len, error_code, error_msg):
+  msg_len = len(error_msg)
+  buf = "d1:eli%de%d:%s" % (error_code, msg_len, error_msg)
+  buf += "e1:t%d:%s1:y1:ee" % (tid_len, tid)
 
-    if peers_list and len(peers_list) > 0:
-      buf += "6:valuesl"
-      for p in peers_list:
-        # !! port needs to be big endian 
-        buf += "%d:%s%s" % (6, ip_as_bytes(p.ip), str(htons(p.port)))
-        # log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
-      buf += "e"
-    buf += "e1:t%d:%s1:y1:re" % (tid_len, tid)
-    if len(buf) <= LARGE_BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
-
-  def peer_announced(self, ip, port, tid, tid_len):
-    buf = "d1:rd2:id20:%se1:t%d:%s1:y1:re" % (self.id, tid_len, tid)
-    if len(buf) <= BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
-
-  def send_error(self, ip, port, tid, tid_len, error_code, error_msg):
-    msg_len = len(error_msg)
-    buf = "d1:eli%de%d:%s" % (error_code, msg_len, error_msg)
-    buf += "e1:t%d:%s1:y1:ee" % (tid_len, tid)
-
-    if len(buf) <= BUF_SIZE:
-      log (buf, "\n")
-      return self.send(buf, ip, port)
+  if len(buf) <= BUF_SIZE:
+    log (buf, "\n")
+    return send(buf, ip, port)
+    

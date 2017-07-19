@@ -1,6 +1,4 @@
-dy_import_module_symbols("node.r2py")
-dy_import_module_symbols("random.r2py")
-dy_import_module_symbols("util.r2py")
+random = dy_import_module("random.r2py")
 
 class Bucket:
 
@@ -29,7 +27,8 @@ class Bucket:
     duplicates = None 
     for n in self.nodes:
       if n.ip == node.ip and n.port == node.port:
-        duplicates = n    
+        duplicates = n  
+        break   
     if duplicates:
       # move existing node to tail
       self.nodes.remove(duplicates)
@@ -71,11 +70,16 @@ class Bucket:
       self.last_changed = getruntime()
 
   def remove_node(self, node):
+    existing_node = None 
+    for n in self.replacements:
+      if n.ip == node.ip and n.port == node.port:
+        existing_node = n  
+        break   
 
-    if node not in self.nodes:
+    if not existing_node:
       return False
 
-    self.nodes.remove(node)
+    self.nodes.remove(existing_node)
     # try adding a good node from the top of the replacement stack 
     while len(self.replacements) > 0:
       replacement_node = self.replacements.pop()
@@ -120,10 +124,10 @@ class Bucket:
     return self.nodes[0]
 
   def random_id(self):
-    return random_randint(self.min, self.max)
+    return random.random_randint(self.min, self.max)
 
   def random_node(self):
-    n = random_int_below(len(self.nodes))
+    n = random.random_int_below(len(self.nodes))
     return self.nodes[n]
 
   def __str__(self):

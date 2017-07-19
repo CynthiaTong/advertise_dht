@@ -1,4 +1,4 @@
-dy_import_module_symbols("dht.r2py")
+dht_module = dy_import_module("dht.r2py")
 
 peers = [("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881), ("router.utorrent.com", 6881)]
 ip = getmyip()
@@ -12,7 +12,7 @@ class DHTNoResponseError(Exception):
 
 def setup(my_id):
   try: 
-    dht = DHT(my_id)
+    dht = dht_module.DHT(my_id)
     listen = setup_listen(dht)
     createthread(listen)
 
@@ -29,7 +29,7 @@ def setup(my_id):
     # dht.ping_node("172.16.46.87", port)
 
   except Exception, e:
-    log ("Failed to initialize DHT. " + str(e) + "\n")
+    raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
   sleep(2)
 

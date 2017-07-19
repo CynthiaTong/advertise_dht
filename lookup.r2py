@@ -1,23 +1,22 @@
-dy_import_module_symbols("node.r2py")
-dy_import_module_symbols("routing.r2py")
-dy_import_module_symbols("rpc.r2py")
-dy_import_module_symbols("util.r2py")
+util = dy_import_module("util.r2py")
+rpc = dy_import_module("rpc.r2py")
 
 
 DHT_SEARCH_EXPIRE_TIME = 62 * 60 
+LOOKUP_CAPACITY = 14
 
-class DHT_Lookup:
+class DHTLookup:
 
-  def __init__(self, string_id, routing_table, rpc):
+  def __init__(self, string_id, routing_table):
+    self.id = string_id 
     self.lookups = list()
-    self.lookup_id = make_lid()
+    self.lookup_id = util.make_lid()
     self.lookup_time = 0 
     self.router = routing_table
-    self.rpc = rpc 
 
   def dht_lookup(self, string_id, port, callback):
     new_lookup = True 
-    target_id = string_to_long(string_id)
+    target_id = util.string_to_long(string_id)
 
     # reusing data from an old lookup  
     for l in self.lookups:
@@ -78,8 +77,8 @@ class DHT_Lookup:
           if not n.acked:
             all_acked = False 
             log ("Sending announce peer. \n")
-            tid = make_tid("ap", lookup.tid)
-            self.rpc.announce_peer(n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, len(n.token))
+            tid = util.make_tid("ap", lookup.tid)
+            rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, len(n.token))
             n.pinged += 1 
             n.last_req = getruntime()
             # find node with this id in routing table 
@@ -123,9 +122,10 @@ class DHT_Lookup:
       return 0 
 
     log ("Sending get_peers.\n")
-    tid = make_tid("gp", lookup.tid)
+    tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
-    self.rpc.get_peers(node.ip, node.port, tid, len(tid), lookup.id)
+    rpc.ping(self.id, node.ip, node.port, tid, len(tid))
+    rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id)
     node.pinged += 1 
     node.last_req = getruntime()
     router_node = self.router.find_node(node.long_id)
@@ -134,8 +134,9 @@ class DHT_Lookup:
     return 1 
 
   def find_lookup_by_tid(self, tid):
+    tid_list = [ord(x) for x in tid]
     for l in self.lookups:
-      if l.tid == int(tid):
+      if l.tid == util.bytes_to_int(tid_list):
         return l 
     return None 
 
@@ -149,7 +150,7 @@ class Lookup:
 
   def __init__(self, string_id, tid, capacity):
     self.id = string_id
-    self.target_id = string_to_long(self.id)
+    self.target_id = util.string_to_long(self.id)
     self.capacity = capacity
     self.tid = tid 
     self.port = 0  # 0 for pure searches 
@@ -165,13 +166,16 @@ class Lookup:
 
     lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
 
+    if id == self.id:
+      return 
+
     if len(self.list) == 0:
       self.list.append(lookup_node)
       return 
 
     for i in range(len(self.list)):
       n = self.list[i]
-      comparison = compare_distance(self.target_id, lookup_node.long_id, n.long_id)
+      comparison = util.compare_distance(self.target_id, lookup_node.long_id, n.long_id)
       if comparison == 0:
         # found 
         if replied:
@@ -238,7 +242,7 @@ class Lookup:
 class Lookup_Node():
   def __init__(self, id, ip, port, replied, token, token_len):
     self.id = id 
-    self.long_id = string_to_long(self.id)
+    self.long_id = util.string_to_long(self.id)
     self.ip = ip 
     self.port = port 
     self.replied = replied 
