@@ -7,10 +7,6 @@ util = dy_import_module("util.r2py")
 random = dy_import_module("random.r2py")
 
 
-DHT_EVENT_NONE = 0
-DHT_EVENT_VALUES = 1
-DHT_EVENT_LOOKUP_DONE = 2
-
 TOKEN_SIZE = 16 
 K_SIZE = 8 
 
@@ -50,18 +46,18 @@ class DHT:
 
       if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
         log ("Faulty message - unparseable: \n", buf, "\n")
-        return self.periodic()
+        return self.periodic(callback)
 
       if sender_id == self.id:
         log ("Received message from self. weird.\n")
-        return self.periodic()
+        return self.periodic(callback)
 
       ## Rate control ?? 
 
       if msg_type == "REPLY":
         if not tid_len == 4:
           log ("Broken tid:\n", buf, "\n")
-          return self.periodic()
+          return self.periodic(callback)
 
         if util.tid_match(tid, "pn"):
           log ("Pong!\n")
@@ -73,12 +69,13 @@ class DHT:
           # try to find among existing lookups by searching lid 
           for lid in lids:
             if lid:
+              lookup_ids = self.lookups.find_lookup_by_tid(lid).get_all_ids()
               lookup = self.lookups.find_lookup_by_tid(lid) 
               log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
               # check nodes_len is normal 
               if not nodes_len % 26 == 0:
                 log ("Unexpected length for node info!\n")
-              elif lookup == None:
+              elif lid == lids[0] and lookup == None:
                 log ("Unknown lookup!\n")
                 self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
               else: # nodes_len normal & existing lookup - it's a proper reply 
@@ -98,21 +95,41 @@ class DHT:
 
                   n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
                   i += 26 
-                  log (n_ip, ": ", n_port, "\n")
+                  # log (n_ip, ": ", n_port, "\n")
                   if n_id == self.id:
                     continue;
                   self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
-                  # insert into the corresponding lookup  
-                  lookup.insert(n_id, n_ip, n_port)
-                  # self.ping_node(n_ip, n_port)
-                # since we got a reply, send out another round of lookup requests
-                for i in range(3):  # alpha 
-                  self.lookups.lookup_get_peers(lookup)
-                # 1 means this node has replied 
-                lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-                log ("--------- LOOKUP ---------\n", str(lookup), "\n")
 
-          if values_len > 0 and lids[0]
+                  # insert into the corresponding lookup  
+                  if lookup: 
+                    lookup.insert(n_id, n_ip, n_port)
+                  self.ping_node(n_ip, n_port)
+
+                if lookup: 
+                  # 1 means this node has replied 
+                  lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
+                  # since we got a reply, send out another round of lookup requests
+                  self.lookups.lookup_step(lookup, callback)
+                  # log ("--------- LOOKUP ---------\n", str(lookup), "\n")
+                  stable = True 
+                  for n in lookup.get_nodes():
+                    if not n.id in lookup_ids:
+                      # if there's a new node, clear stable results 
+                      self.lookups.stable_results = 0
+                      stable = False 
+                      break 
+                  # otherwise, increment stable results: we are left with the same results as last time
+                  if stable: 
+                    self.lookups.stable_results += 1 
+
+                  log ("--------- LOOKUP ---------\n", lookup.all_good_nodes(), "stable results: %d\n" % self.lookups.stable_results)
+                  # if lookup results have stablized (invarient for > 10 times) and there are some results 
+                  # return as finished 
+                  if self.lookups.stable_results > 10 and len(lookup.get_nodes()) > 0:
+                    self.lookups.lookup_finished(lookup, callback)
+
+
+          if values_len > 0 and lids[0]:
             log ("Got %d values!\n" % (values_len/6))
             filtered_values = list()
             i = 0 
@@ -128,7 +145,7 @@ class DHT:
               filtered_values.append((v_ip, v_port))
               log (v_ip, ": ", v_port, "\n")
             if callback:
-              return callback(DHT_EVENT_VALUES, lookup.target_id, filtered_values, len(filtered_values))
+              return callback(DHT_EVENT_VALUES, lookup.id, filtered_values, len(filtered_values))
 
         elif util.tid_match(tid, "ap"):  
           log ("Got reply to announce_peer!\n")
@@ -168,20 +185,20 @@ class DHT:
       elif msg_type == "GET_PEERS":
         log ("Get peers!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        if string_to_long(info_hash) == 0:
+        if util.string_to_long(info_hash) == 0:
           log ("Got get_peers with no info_hash\n")
           rpc.send_error(source_ip, source_port, tid, tid_len, 
                               203, "Get_peers with no infohash.")
         else:
           peers_list = self.storage.retrieve(info_hash)
-          token = make_token(source_ip, self.secret_package[1])
+          token = util.make_token(source_ip, self.secret_package[1])
           if peers_list:
             log ("Sending found peers.\n")
             rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
                                         token, TOKEN_SIZE, peers_list)
           else:
             log ("Sending nodes for get_peers.\n")
-            rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash)
+            rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash)
 
       elif msg_type == "ANNOUNCE_PEER":
         log ("Announce peer!\n")
@@ -203,7 +220,7 @@ class DHT:
         log ("Sending peer announced.\n")
         rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len)
 
-  def periodic(self):
+  def periodic(self, callback):
     log ("do periodic stuff.\n")
     # if now > rotate_secret_time 
     if getruntime() >= self.secret_package[2]: 
@@ -215,17 +232,18 @@ class DHT:
       self.lookups.expire_lookups()
 
     if 0 < self.lookups.lookup_time <= getruntime():
+      lks = self.lookups.get_lookups()
       # execute the lookups 
-      if len(self.lookups) > 0:
-        for l in self.lookups:
+      if len(lks) > 0:
+        for l in lks:
           if not l.done and l.step_time <= getruntime() - 5:
             self.lookups.lookup_step(l, callback)
 
       # increase lookup_time for next rounds of steps 
       self.lookups.lookup_time = 0 
-      for l in self.lookups:
+      for l in lks:
         if not l.done:
-          l_time = l.step_time + 15 + random.random_int_below(10)
+          l_time = l.step_time + 15 + random.random_int_below(10)    # next lookup in 15 - 25 seconds 
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
 
