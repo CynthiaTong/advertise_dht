@@ -55,16 +55,6 @@ def token_match(token, ip, old_secret, secret):
 
   return False 
 
-# Converts 20 bytes into a long number
-def string_to_long(data):
-  # Store the number
-  num = 0L
-  offset = 0
-  for char in data:
-    num |= ord(char) << offset * 8
-    offset += 1
-  return num
-
 def xor_distance(num1, num2):
   return num1 ^ num2 
 
@@ -76,12 +66,21 @@ def ip_as_bytes(ip):
   ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
   return ip_as_bytes
 
+# Converts string of bytes into a long number
+def string_to_long(data):
+  num = 0L
+  offset = 0
+  for char in data:
+    num |= ord(char) << offset * 8
+    offset += 1
+  return num
+
 def htons(num):
   # if integer is 2-byte 
   if (num.bit_length() + 7) // 8 == 2:
-    n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
-    # log (n, "\n")
-    return int_to_bytes(n)
+  n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
+  # log (n, "\n")
+  return int_to_bytes(n)
   raise Exception("htons: integer is not 2 bytes.\n")
   return -1 
 
@@ -119,16 +118,12 @@ def int_to_bytes(long_int):
 
   return byte_string
 
-
 def bytes_to_int(bytes):
   n = 0
   # read from bytes and add to n 
   for b in bytes:
     n = n * 256 + int(b)
-  # transform back to host byte order 
-  n = ((n & 0xFF) << 8) | ((n & 0xFF00) >> 8)
   return n
-
 
 def length_check(index, length, buf_len):
   if index + length > buf_len:
