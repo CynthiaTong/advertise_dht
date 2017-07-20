@@ -124,7 +124,7 @@ class DHTLookup:
     log ("Sending get_peers.\n")
     tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
-    rpc.ping(self.id, node.ip, node.port, tid, len(tid))
+    # rpc.ping(self.id, node.ip, node.port, tid, len(tid))
     rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id)
     node.pinged += 1 
     node.last_req = getruntime()

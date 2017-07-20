@@ -105,13 +105,14 @@ class DHT:
                   # insert into the corresponding lookup  
                   lookup.insert(n_id, n_ip, n_port)
                   # self.ping_node(n_ip, n_port)
-                # since we got a reply, send out another lookup request 
-                self.lookups.lookup_get_peers(lookup)
+                # since we got a reply, send out another round of lookup requests
+                for i in range(3):  # alpha 
+                  self.lookups.lookup_get_peers(lookup)
                 # 1 means this node has replied 
                 lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                 log ("--------- LOOKUP ---------\n", str(lookup), "\n")
 
-          if values_len > 0 and lids[0]:
+          if values_len > 0 and lids[0]
             log ("Got %d values!\n" % (values_len/6))
             filtered_values = list()
             i = 0 
@@ -224,16 +225,16 @@ class DHT:
       self.lookups.lookup_time = 0 
       for l in self.lookups:
         if not l.done:
-          l_time = l.step_time + 15 + util.random_int_below(10)
+          l_time = l.step_time + 15 + random.random_int_below(10)
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
 
     if self.refresh_buckets_time <= getruntime():
       refreshed = self.router.refresh_buckets()
       if refreshed:
-        self.refresh_buckets_time = getruntime() + 5 + util.random_int_below(20)   # next refresh in < 25 seconds 
+        self.refresh_buckets_time = getruntime() + 5 + random.random_int_below(20)   # next refresh in < 25 seconds 
       else:
-        self.refresh_buckets_time = getruntime() + 60 + util.random_int_below(120)   # next refresh in 1 - 3 min 
+        self.refresh_buckets_time = getruntime() + 60 + random.random_int_below(120)   # next refresh in 1 - 3 min 
 
     refresh_interval = self.refresh_buckets_time - getruntime()
     if refresh_interval > 0:
