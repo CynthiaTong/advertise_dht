@@ -13,6 +13,7 @@ class DHTLookup:
     self.lookup_id = util.make_lid()
     self.lookup_time = 0 
     self.router = routing_table
+    self.stable_results = 0 
 
   def dht_lookup(self, string_id, port, callback):
     new_lookup = True 
@@ -29,7 +30,7 @@ class DHTLookup:
             l.remove(n)
         # get some new lookup nodes 
         l = self.router.get_lookup_nodes(l, target_id)
-        log ("old ")
+        # log ("old ")
         self.lookup_step(l, callback)
         break 
 
@@ -50,22 +51,20 @@ class DHTLookup:
 
       newest = self.router.get_lookup_nodes(newest, target_id)
       newest.port = port 
-      log ("new ")
+      # log ("new ")
       self.lookup_step(newest, callback)
       # log (newest.get_all_ids(), "\n")
     # update lookup_time 
     self.lookup_time = getruntime()
-    # callback(DHT_EVENT_LOOKUP_DONE, target_id)
-
+    
   def lookup_step(self, lookup, callback):
-    finished = False 
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
     # if we have k live nodes 
     if all_replied:
       # finished for pure lookup 
       if lookup.port == 0:
-        finished = True 
+        self.lookup_finished(lookup, callback)
       else: 
         all_acked = True 
         count = 0 
@@ -86,7 +85,7 @@ class DHTLookup:
             if router_node:
               self.router.pinged(router_node)
         if all_acked:
-          finished = True 
+          self.lookup_finished(lookup, callback) 
       lookup.step_time = getruntime()
       return 
 
@@ -101,16 +100,15 @@ class DHTLookup:
       send_count += self.lookup_get_peers(lookup, n)
       if send_count >= 3:
         break 
-    lookup.step_time = getruntime()
-    return
-
-    if finished:
-      lookup.done = 1 
-      lookup.step_time = getruntime()
-      if callback:
-        return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
 
     lookup.step_time = getruntime()
+
+  def lookup_finished(self, lookup, callback):
+    lookup.done = 1 
+    lookup.step_time = getruntime()
+    if callback:
+      return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
+    log ("LOOKUP DOOOOOOOOOOOOOONE!!!!!!!!!!!!!\n")
 
   def lookup_get_peers(self, lookup, node=None):
     if not node:
@@ -124,7 +122,6 @@ class DHTLookup:
     log ("Sending get_peers.\n")
     tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
-    # rpc.ping(self.id, node.ip, node.port, tid, len(tid))
     rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id)
     node.pinged += 1 
     node.last_req = getruntime()
@@ -134,9 +131,8 @@ class DHTLookup:
     return 1 
 
   def find_lookup_by_tid(self, tid):
-    tid_list = [ord(x) for x in tid]
     for l in self.lookups:
-      if l.tid == util.bytes_to_int(tid_list):
+      if l.tid == util.string_to_long(tid):
         return l 
     return None 
 
@@ -145,6 +141,8 @@ class DHTLookup:
       if l.step_time < getruntime() - DHT_SEARCH_EXPIRE_TIME:
         self.lookups.remove(l)
 
+  def get_lookups(self):
+    return self.lookups 
 
 class Lookup:
 
@@ -208,25 +206,25 @@ class Lookup:
       return True 
     return False 
 
+  # we only need at least k (8) replied nodes to count as all_replied  
   def all_replied(self):
     live_node_count = 0 
 
     for n in self.list:
       if n.pinged >= 3: 
-        continue    
+        continue 
+      if not n.replied:
+        continue     
       if live_node_count >= 8:
         return True  
-      if not n.replied:
-        return False  
       live_node_count += 1 
-
     return False 
 
   def get_nodes(self):
     return self.list 
 
   def get_all_ids(self):
-    return [n.long_id for n in self.list]
+    return [n.id for n in self.list]
 
   def is_full(self):
     return len(self.list) >= self.capacity
@@ -237,6 +235,15 @@ class Lookup:
     output += "lookup nodes (%d): \n" % len(self.list)
     for l in self.list:
       output += l.ip + "\t" + str(l.replied) + "\n"
+    return output 
+
+  def all_good_nodes(self):
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
+            (self.target_id, self.tid, self.port, self.step_time, self.done))
+    output += "good lookup nodes: \n"
+    for l in self.list:
+      if l.replied:
+        output += l.ip + "\t" + str(l.replied) + "\n"
     return output 
 
 class Lookup_Node():
