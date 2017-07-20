@@ -1,16 +1,26 @@
 dht_module = dy_import_module("dht.r2py")
+rpc = dy_import_module("rpc.r2py")
+util = dy_import_module("util.r2py")
 
-peers = [("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881), ("router.utorrent.com", 6881)]
+peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
+
 ip = getmyip()
 port = 63101
-timeout = 1000  # for testing, set it to be a large number 
+timeout = 600   # for testing, set it to be a large number 
 dht = None 
+
+DHT_EVENT_NONE = 0
+DHT_EVENT_VALUES = 1
+DHT_EVENT_LOOKUP_DONE = 2
+
+periodic_interval = 10 
+mycontext['periodic_time'] = 0 
 
 class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
 
 
-def setup(my_id):
+def dhtadvertise_setup(my_id):
   try: 
     dht = dht_module.DHT(my_id)
     listen = setup_listen(dht)
@@ -24,21 +34,29 @@ def setup(my_id):
       dht.ping_node(ip, port)
 
       sleep(0.05)
-      # break     ### to be removed 
-
-    # dht.ping_node("172.16.46.87", port)
 
   except Exception, e:
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
   sleep(2)
 
-  # nodes = dht.router.get_all_nodes()
-  # log (nodes, "\n")
+  dht.periodic(callback)
+  mycontext['periodic_time'] = getruntime()
+  periodic = setup_periodic(dht)
+  createthread(periodic)
+
   dht.lookups.dht_lookup(my_id, 0, callback)    # lookup my_id 
+
   # refresh buckets 
   dht.router.refresh_buckets()
 
+def setup_periodic(dht):
+  def periodic():
+    while True:
+      if mycontext['periodic_time'] < getruntime() - periodic_interval:
+        dht.periodic(callback)
+        mycontext['periodic_time'] = getruntime() 
+  return periodic
 
 def setup_listen(dht):
   def listen():
@@ -52,9 +70,9 @@ def setup_listen(dht):
     while getruntime() < starttime + timeout:
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
-        log ("=========================\nGot message! \n", 
-              remoteip, ": ", remoteport, "\n", message, 
-              "\n-------------------------\n")
+        # log ("=========================\nGot message: ", 
+        #       remoteip, ": ", remoteport, "\n", message, 
+        #       "\n-------------------------\n")
 
         dht.new_message(message, remoteip, remoteport, 1)
 
@@ -68,5 +86,25 @@ def setup_listen(dht):
   return listen 
 
 
-def callback(EVENT, id, data=None, data_len=0):
-  log (EVENT, "\t", id, "\n")
+def callback(event, id, data=None, data_len=0):
+  if event == DHT_EVENT_LOOKUP_DONE:
+    log ("Lookup done. ID: ", id, "\n")
+  elif event == DHT_EVENT_VALUES and data:
+    log ("Received %d values." % (data_len/6))
+        
+
+# if the values we're looking for exist in local storage 
+def dhtadvertise_local_lookup(id):
+  values = dht.storage.retrieve(id)
+  if values:
+    return values 
+
+def read_id_from_file(filename):
+  file = openfile(filename, False)
+  value = file.readat(20, 0)
+  file.close()
+  return value 
+
+# expose the ping method to advertise users 
+def dhtadvertise_ping(ip, port):
+  dht.ping_node(ip, port)
