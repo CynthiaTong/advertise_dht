@@ -4,6 +4,8 @@ rpc = dy_import_module("rpc.r2py")
 
 DHT_SEARCH_EXPIRE_TIME = 62 * 60 
 LOOKUP_CAPACITY = 14
+DHT_EVENT_LOOKUP_DONE = 2
+
 
 class DHTLookup:
 
@@ -56,10 +58,14 @@ class DHTLookup:
       # log (newest.get_all_ids(), "\n")
     # update lookup_time 
     self.lookup_time = getruntime()
-    
+
   def lookup_step(self, lookup, callback):
+    if lookup.done:
+      return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
+
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
+    # log ("All replied: ", all_replied, "\n")
     # if we have k live nodes 
     if all_replied:
       # finished for pure lookup 
@@ -107,7 +113,7 @@ class DHTLookup:
     lookup.done = 1 
     lookup.step_time = getruntime()
     if callback:
-      return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
+      return callback(DHT_EVENT_LOOKUP_DONE, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))
     log ("LOOKUP DOOOOOOOOOOOOOONE!!!!!!!!!!!!!\n")
 
   def lookup_get_peers(self, lookup, node=None):
@@ -194,7 +200,12 @@ class Lookup:
       else: # node is closer  
         self.list.insert(i, lookup_node)
         if len(self.list) > self.capacity:
-          self.list.pop()
+          # remove the furthest node that hasn't replied 
+          i = len(self.list) -1 
+          while self.list[i].replied and i >= 0:
+            i -= 1 
+          if not self.list[i].replied:
+            self.list.pop(i)
         return 
     # if there's room in capacity after looping through self.list, just append new node 
     if len(self.list) < self.capacity:
@@ -215,9 +226,10 @@ class Lookup:
         continue 
       if not n.replied:
         continue     
-      if live_node_count >= 8:
-        return True  
       live_node_count += 1 
+      
+    if live_node_count >= 8:
+        return True 
     return False 
 
   def get_nodes(self):
@@ -237,7 +249,7 @@ class Lookup:
       output += l.ip + "\t" + str(l.replied) + "\n"
     return output 
 
-  def all_good_nodes(self):
+  def print_good_nodes(self):
     output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
             (self.target_id, self.tid, self.port, self.step_time, self.done))
     output += "good lookup nodes: \n"
@@ -245,6 +257,13 @@ class Lookup:
       if l.replied:
         output += l.ip + "\t" + str(l.replied) + "\n"
     return output 
+
+  def get_good_nodes(self):
+    l_list = list()
+    for l in self.list:
+      if l.replied:
+        l_list.append(l)
+    return l_list 
 
 class Lookup_Node():
   def __init__(self, id, ip, port, replied, token, token_len):

@@ -6,15 +6,14 @@ peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router
 
 ip = getmyip()
 port = 63101
-timeout = 600   # for testing, set it to be a large number 
+timeout = 420   # for testing, set it to be a large number 
 dht = None 
+mycontext['callbacked'] = False 
 
 DHT_EVENT_NONE = 0
 DHT_EVENT_VALUES = 1
 DHT_EVENT_LOOKUP_DONE = 2
 
-periodic_interval = 10 
-mycontext['periodic_time'] = 0 
 
 class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
@@ -23,7 +22,7 @@ class DHTNoResponseError(Exception):
 def dhtadvertise_setup(my_id):
   try: 
     dht = dht_module.DHT(my_id)
-    listen = setup_listen(dht)
+    listen = setup_listen(dht, timeout)
     createthread(listen)
 
     for p in peers:
@@ -38,27 +37,23 @@ def dhtadvertise_setup(my_id):
   except Exception, e:
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
-  sleep(2)
-
-  dht.periodic(callback)
-  mycontext['periodic_time'] = getruntime()
-  periodic = setup_periodic(dht)
-  createthread(periodic)
+  sleep(2) 
 
   dht.lookups.dht_lookup(my_id, 0, callback)    # lookup my_id 
 
-  # refresh buckets 
-  dht.router.refresh_buckets()
+  # call periodic 
+  periodic = setup_periodic(dht)
+  createthread(periodic)
+
 
 def setup_periodic(dht):
   def periodic():
     while True:
-      if mycontext['periodic_time'] < getruntime() - periodic_interval:
+      if dht.to_sleep <= getruntime():
         dht.periodic(callback)
-        mycontext['periodic_time'] = getruntime() 
   return periodic
 
-def setup_listen(dht):
+def setup_listen(dht, ttl):
   def listen():
     starttime = getruntime()
 
@@ -67,14 +62,17 @@ def setup_listen(dht):
 
     udpresponsesocket = listenformessage(ip, port)
 
-    while getruntime() < starttime + timeout:
+    while getruntime() < starttime + ttl:
+      if mycontext['callbacked']:
+        break 
+
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
         # log ("=========================\nGot message: ", 
         #       remoteip, ": ", remoteport, "\n", message, 
         #       "\n-------------------------\n")
 
-        dht.new_message(message, remoteip, remoteport, 1)
+        dht.new_message(message, remoteip, remoteport, callback)
 
       except SocketWouldBlockError:
         sleep(0.1)
@@ -82,16 +80,30 @@ def setup_listen(dht):
         break
 
     udpresponsesocket.close()
-    raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
+    if not mycontext['callbacked']:
+      raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
+
+    log (dht.router)  # dump buckets to see how many contacts we've accumulated 
+    exitall()
+
   return listen 
 
 
-def callback(event, id, data=None, data_len=0):
+def callback(event, id, data, data_len):
+  output = ""
   if event == DHT_EVENT_LOOKUP_DONE:
-    log ("Lookup done. ID: ", id, "\n")
-  elif event == DHT_EVENT_VALUES and data:
-    log ("Received %d values." % (data_len/6))
-        
+    output = "=========================\nLookup done. ID: %s\n" % id 
+  elif event == DHT_EVENT_VALUES:
+    output = "=========================\nReceived values. ID: %s\n" %id 
+
+  if data:
+    output += "Results (%d): \n" % data_len
+    for d in data:
+      output += d.ip + ": " + str(d.port) + "\n"
+    output += "-------------------------\n"
+    log (output)
+
+  mycontext['callbacked'] = True 
 
 # if the values we're looking for exist in local storage 
 def dhtadvertise_local_lookup(id):

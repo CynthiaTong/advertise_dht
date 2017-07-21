@@ -9,7 +9,7 @@ random = dy_import_module("random.r2py")
 
 TOKEN_SIZE = 16 
 K_SIZE = 8 
-
+DHT_EVENT_VALUES = 1
 
 class DHT:
 
@@ -22,19 +22,20 @@ class DHT:
     self.storage = storage.Storage(self.id) 
     self.secret_package = util.rotate_secret() 
     self.refresh_buckets_time = getruntime() + random.random_int_below(3)
+    self.to_sleep = getruntime()
 
     # bucket_grow_time for mybucket maintenance? 
     # token_bucket_time for rate control?
 
-  def new_message(self, buf, source_ip, source_port, to_sleep, callback=None):
+  def new_message(self, buf, source_ip, source_port, callback=None):
 
     if buf and len(buf) > 0:
       if util.invalid_address(source_ip, source_port):
-        return self.periodic()
+        return self.periodic(callback)
 
       msg = util.parse_message(buf)
       if msg == -1:
-        return self.periodic()
+        return self.periodic(callback)
 
       # log (msg, "\n")
       (msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
@@ -48,15 +49,15 @@ class DHT:
         log ("Faulty message - unparseable: \n", buf, "\n")
         return self.periodic(callback)
 
-      if sender_id == self.id:
+      if sender_id == self.id and source_ip == getmyip():
         log ("Received message from self. weird.\n")
         return self.periodic(callback)
 
       ## Rate control ?? 
 
       if msg_type == "REPLY":
-        if not tid_len == 4:
-          log ("Broken tid:\n", buf, "\n")
+        if not tid_len == len(tid):
+          log ("Broken tid: ", tid, "\n")
           return self.periodic(callback)
 
         if util.tid_match(tid, "pn"):
@@ -103,16 +104,17 @@ class DHT:
                   # insert into the corresponding lookup  
                   if lookup: 
                     lookup.insert(n_id, n_ip, n_port)
-                  self.ping_node(n_ip, n_port)
+                  # self.ping_node(n_ip, n_port)
 
                 if lookup: 
                   # 1 means this node has replied 
                   lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                   # since we got a reply, send out another round of lookup requests
                   self.lookups.lookup_step(lookup, callback)
-                  # log ("--------- LOOKUP ---------\n", str(lookup), "\n")
-                  stable = True 
-                  for n in lookup.get_nodes():
+                  # check if we got the exact same results after this reply                   
+                  lookup_nodes = lookup.get_nodes()
+                  stable = len(lookup_ids) == len(lookup_nodes)
+                  for n in lookup_nodes:
                     if not n.id in lookup_ids:
                       # if there's a new node, clear stable results 
                       self.lookups.stable_results = 0
@@ -122,12 +124,11 @@ class DHT:
                   if stable: 
                     self.lookups.stable_results += 1 
 
-                  log ("--------- LOOKUP ---------\n", lookup.all_good_nodes(), "stable results: %d\n" % self.lookups.stable_results)
+                  log ("--------- LOOKUP ---------\n", lookup.print_good_nodes(), "stable results: %d\n" % self.lookups.stable_results)
                   # if lookup results have stablized (invarient for > 10 times) and there are some results 
                   # return as finished 
-                  if self.lookups.stable_results > 10 and len(lookup.get_nodes()) > 0:
+                  if self.lookups.stable_results >= 10 and len(lookup.get_nodes()) > 0:
                     self.lookups.lookup_finished(lookup, callback)
-
 
           if values_len > 0 and lids[0]:
             log ("Got %d values!\n" % (values_len/6))
@@ -143,7 +144,7 @@ class DHT:
               v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
               i += 6
               filtered_values.append((v_ip, v_port))
-              log (v_ip, ": ", v_port, "\n")
+              # log (v_ip, ": ", v_port, "\n")
             if callback:
               return callback(DHT_EVENT_VALUES, lookup.id, filtered_values, len(filtered_values))
 
@@ -205,16 +206,13 @@ class DHT:
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         if util.string_to_long(info_hash) == 0:
           log ("Got announce_peer with no info_hash\n")
-          return rpc.send_error(source_ip, source_port, tid, tid_len, 
-                                203, "Announce_peer with no infohash.")   
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash.")   
         if port == 0:
           log ("Got announce_peer with port 0\n")
-          return rpc.send_error(source_ip, source_port, tid, tid_len, 
-                                203, "Announce_peer with forbidden port number.")   
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number.")   
         if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
           log ("Got announce_peer with invalid token\n")
-          return rpc.send_error(source_ip, source_port, tid, tid_len, 
-                                203, "Announce_peer with invalid token.") 
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token.") 
 
         self.storage.store(sender_id, source_ip, source_port)
         log ("Sending peer announced.\n")
@@ -246,6 +244,9 @@ class DHT:
           l_time = l.step_time + 15 + random.random_int_below(10)    # next lookup in 15 - 25 seconds 
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
+            # log ("L time...%.2f\n" % self.lookups.lookup_time)
+
+    log ("Run time...%.2f\n" % getruntime())
 
     if self.refresh_buckets_time <= getruntime():
       refreshed = self.router.refresh_buckets()
@@ -254,19 +255,21 @@ class DHT:
       else:
         self.refresh_buckets_time = getruntime() + 60 + random.random_int_below(120)   # next refresh in 1 - 3 min 
 
-    refresh_interval = self.refresh_buckets_time - getruntime()
-    if refresh_interval > 0:
-      to_sleep = refresh_interval
+    if self.refresh_buckets_time > getruntime():
+      self.to_sleep = self.refresh_buckets_time
     else:
-      to_sleep = 0 
+      self.to_sleep = getruntime()
+    log ("Refresh time...%.2f\n" % self.refresh_buckets_time)
 
-    if self.lookups.lookup_time > 0:
-      lookup_interval = self.lookups.lookup_time - getruntime()
-      if lookup_interval > 0:
-        to_sleep = lookup_interval
+    if self.lookups.lookup_time > 0 and self.lookups.lookup_time < self.to_sleep:
+      if self.lookups.lookup_time > getruntime():
+        self.to_sleep = self.lookups.lookup_time
       else:
-        to_sleep = 0 
-    return True 
+        self.to_sleep = getruntime() 
+    log ("Lookup time...%.2f\n" % self.lookups.lookup_time)
+    log ("Sleep until...%.2f\n" % self.to_sleep)
+    return True
+
 
   def ping_node(self, ip, port):
     tid = util.make_tid("pn", util.make_lid())
