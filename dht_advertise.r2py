@@ -5,8 +5,8 @@ util = dy_import_module("util.r2py")
 peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
 
 ip = getmyip()
-port = 63101
-timeout = 420   # for testing, set it to be a large number 
+my_port = 63101
+timeout = 600   # for testing, set it to be a large number 
 dht = None 
 mycontext['callbacked'] = False 
 
@@ -19,10 +19,10 @@ class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
 
 
-def dhtadvertise_setup(my_id):
+def dhtadvertise_setup(my_id, my_version=None):
   try: 
-    dht = dht_module.DHT(my_id)
-    listen = setup_listen(dht, timeout)
+    dht = dht_module.DHT(my_id, my_version)
+    listen = setup_listen(dht)
     createthread(listen)
 
     for p in peers:
@@ -37,9 +37,9 @@ def dhtadvertise_setup(my_id):
   except Exception, e:
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
-  sleep(2) 
+  sleep(1) 
 
-  dht.lookups.dht_lookup(my_id, 0, callback)    # lookup my_id 
+  dht.lookups.dht_lookup(my_id, 0, callback, my_version)    # lookup my_id 
 
   # call periodic 
   periodic = setup_periodic(dht)
@@ -53,7 +53,7 @@ def setup_periodic(dht):
         dht.periodic(callback)
   return periodic
 
-def setup_listen(dht, ttl):
+def setup_listen(dht):
   def listen():
     starttime = getruntime()
 
@@ -62,7 +62,7 @@ def setup_listen(dht, ttl):
 
     udpresponsesocket = listenformessage(ip, port)
 
-    while getruntime() < starttime + ttl:
+    while getruntime() < starttime + timeout:
       if mycontext['callbacked']:
         break 
 
@@ -83,7 +83,7 @@ def setup_listen(dht, ttl):
     if not mycontext['callbacked']:
       raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
 
-    log (dht.router)  # dump buckets to see how many contacts we've accumulated 
+    # log (dht.router)  # dump buckets to see how many contacts we've accumulated 
     exitall()
 
   return listen 

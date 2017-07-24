@@ -13,11 +13,12 @@ DHT_EVENT_VALUES = 1
 
 class DHT:
 
-  def __init__(self, dht_id):
+  def __init__(self, dht_id, version_id):
     self.id = dht_id
     self.long_id = util.string_to_long(self.id)
+    self.version_id = version_id 
 
-    self.router = routing.RoutingTable(self.id, K_SIZE) 
+    self.router = routing.RoutingTable(self.id, K_SIZE, version_id) 
     self.lookups = lookup.DHTLookup(self.id, self.router)
     self.storage = storage.Storage(self.id) 
     self.secret_package = util.rotate_secret() 
@@ -109,8 +110,7 @@ class DHT:
                 if lookup: 
                   # 1 means this node has replied 
                   lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-                  # since we got a reply, send out another round of lookup requests
-                  self.lookups.lookup_step(lookup, callback)
+                
                   # check if we got the exact same results after this reply                   
                   lookup_nodes = lookup.get_nodes()
                   stable = len(lookup_ids) == len(lookup_nodes)
@@ -128,7 +128,10 @@ class DHT:
                   # if lookup results have stablized (invarient for > 10 times) and there are some results 
                   # return as finished 
                   if self.lookups.stable_results >= 10 and len(lookup.get_nodes()) > 0:
-                    self.lookups.lookup_finished(lookup, callback)
+                    self.lookups.lookup_step(lookup, callback, self.version_id, 1)
+                  else: 
+                    # since we got a reply, send out another round of lookup requests
+                    self.lookups.lookup_step(lookup, callback, self.version_id, 0)
 
           if values_len > 0 and lids[0]:
             log ("Got %d values!\n" % (values_len/6))
@@ -157,7 +160,7 @@ class DHT:
             self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
           else:
             self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-            for n in lookup:
+            for n in lookup.get_nodes():
               if n.id == sender_id:
                 n.last_req = 0 
                 n.replied = 1 
@@ -175,13 +178,13 @@ class DHT:
         log ("Ping!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         log ("Sending pong.\n")
-        rpc.pong(self.id, source_ip, source_port, tid, tid_len)
+        rpc.pong(self.id, source_ip, source_port, tid, tid_len, self.version_id)
 
       elif msg_type == "FIND_NODE":
         log ("Find node!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         log ("Sending closest node to find_node req.\n")
-        rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target)
+        rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target, self.version_id)
 
       elif msg_type == "GET_PEERS":
         log ("Get peers!\n")
@@ -189,34 +192,34 @@ class DHT:
         if util.string_to_long(info_hash) == 0:
           log ("Got get_peers with no info_hash\n")
           rpc.send_error(source_ip, source_port, tid, tid_len, 
-                              203, "Get_peers with no infohash.")
+                              203, "Get_peers with no infohash.", self.version_id)
         else:
           peers_list = self.storage.retrieve(info_hash)
           token = util.make_token(source_ip, self.secret_package[1])
           if peers_list:
             log ("Sending found peers.\n")
             rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
-                                        token, TOKEN_SIZE, peers_list)
+                                        token, TOKEN_SIZE, peers_list, self.version_id)
           else:
             log ("Sending nodes for get_peers.\n")
-            rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash)
+            rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, self.version_id)
 
       elif msg_type == "ANNOUNCE_PEER":
         log ("Announce peer!\n")
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         if util.string_to_long(info_hash) == 0:
           log ("Got announce_peer with no info_hash\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash.")   
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash.", self.version_id)   
         if port == 0:
           log ("Got announce_peer with port 0\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number.")   
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number.", self.version_id)   
         if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
           log ("Got announce_peer with invalid token\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token.") 
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token.", self.version_id) 
 
         self.storage.store(sender_id, source_ip, source_port)
         log ("Sending peer announced.\n")
-        rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len)
+        rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len, self.version_id)
 
   def periodic(self, callback):
     log ("do periodic stuff.\n")
@@ -235,7 +238,7 @@ class DHT:
       if len(lks) > 0:
         for l in lks:
           if not l.done and l.step_time <= getruntime() - 5:
-            self.lookups.lookup_step(l, callback)
+            self.lookups.lookup_step(l, callback, self.version_id)
 
       # increase lookup_time for next rounds of steps 
       self.lookups.lookup_time = 0 
@@ -273,4 +276,4 @@ class DHT:
 
   def ping_node(self, ip, port):
     tid = util.make_tid("pn", util.make_lid())
-    return rpc.ping(self.id, ip, port, tid, len(tid))
+    return rpc.ping(self.id, ip, port, tid, len(tid), self.version_id)

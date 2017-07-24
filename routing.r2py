@@ -1,13 +1,15 @@
 node = dy_import_module("node.r2py")
 bucket = dy_import_module("bucket.r2py")
-util = dy_import_module("util.r2py")
 rpc = dy_import_module("rpc.r2py")
+util = dy_import_module("util.r2py")
+random = dy_import_module("random.r2py")
 
 
 class RoutingTable:
-  def __init__(self, string_id, ksize):
+  def __init__(self, string_id, ksize, version_id=None):
     self.id = string_id
     self.long_id = util.string_to_long(string_id)
+    self.version_id = version_id
     self.ksize = ksize 
     self.expire_stuff_time = 0  
     self.initial_bucket()
@@ -76,7 +78,7 @@ class RoutingTable:
           log ("Node ", n.long_id, " gets pinged.\n")
           tid = util.make_tid("pn", util.make_lid())
           # Ping that node 
-          rpc.ping(self.id, n.ip, n.port, tid, len(tid))
+          rpc.ping(self.id, n.ip, n.port, tid, len(tid), self.version_id)
           n.pinged += 1 
           n.last_pinged = getruntime()
           break 
@@ -101,6 +103,11 @@ class RoutingTable:
 
   def refresh_buckets(self):
     buckets = self.get_unvisited_buckets()
+
+    log ("%d buckets need refresh! \n" % len(buckets))
+    # for b in buckets:
+    #   log (str(b), "\n")
+
     if len(buckets) == 0:
       return False 
 
@@ -120,7 +127,7 @@ class RoutingTable:
         log ("Sending find_node for bucket refresh.\n")
         n = q.random_node()
         tid = util.make_tid("fn",  util.make_lid())
-        rpc.find_node(self.id, n.ip, n.port, tid, 4, random_id)
+        rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, self.version_id)
         self.pinged(n, q)
         return True 
     return False 
@@ -232,7 +239,7 @@ class RoutingTable:
     if len(bucket.replacements) > 0:
       top = bucket.replacements[-1]
       log ("Sending ping to replacement node.\n")
-      rpc.ping(self.id, top.ip, top.port, tid, len(tid))
+      rpc.ping(self.id, top.ip, top.port, tid, len(tid), self.version_id)
 
   def __str__(self):
     output = ""
