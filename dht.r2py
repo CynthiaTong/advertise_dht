@@ -71,8 +71,9 @@ class DHT:
           # try to find among existing lookups by searching lid 
           for lid in lids:
             if lid:
-              lookup_ids = self.lookups.find_lookup_by_tid(lid).get_all_ids()
               lookup = self.lookups.find_lookup_by_tid(lid) 
+              old_closest_node = lookup.get_nodes()[0]
+
               log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
               # check nodes_len is normal 
               if not nodes_len % 26 == 0:
@@ -105,33 +106,27 @@ class DHT:
                   # insert into the corresponding lookup  
                   if lookup: 
                     lookup.insert(n_id, n_ip, n_port)
-                  # self.ping_node(n_ip, n_port)
 
                 if lookup: 
                   # 1 means this node has replied 
                   lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-                
-                  # check if we got the exact same results after this reply                   
-                  lookup_nodes = lookup.get_nodes()
-                  stable = len(lookup_ids) == len(lookup_nodes)
-                  for n in lookup_nodes:
-                    if not n.id in lookup_ids:
-                      # if there's a new node, clear stable results 
-                      self.lookups.stable_results = 0
-                      stable = False 
-                      break 
-                  # otherwise, increment stable results: we are left with the same results as last time
-                  if stable: 
+                  # if we failed to get a new closest node, increment stable_results
+                  if old_closest_node == lookup.get_nodes()[0]: 
                     self.lookups.stable_results += 1 
+                  else:
+                    self.lookups.stable_results = 0  
 
-                  log ("--------- LOOKUP ---------\n", lookup.print_good_nodes(), "stable results: %d\n" % self.lookups.stable_results)
-                  # if lookup results have stablized (invarient for > 10 times) and there are some results 
-                  # return as finished 
-                  if self.lookups.stable_results >= 10 and len(lookup.get_nodes()) > 0:
-                    self.lookups.lookup_step(lookup, callback, self.version_id, 1)
-                  else: 
-                    # since we got a reply, send out another round of lookup requests
-                    self.lookups.lookup_step(lookup, callback, self.version_id, 0)
+                  log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
+            
+                  # avoid too frequent lookup steps 
+                  sleep(1)
+                  # if we haven't seen a new closest node for alpha(3) times 
+                  if self.lookups.stable_results >= 3:
+                    # query ALL lookup nodes that haven't replied 
+                    self.lookups.lookup_step(lookup, callback, self.version_id, alpha=14)
+                  else:
+                    # query another alpha nodes that haven't replied 
+                    self.lookups.lookup_step(lookup, callback, self.version_id)
 
           if values_len > 0 and lids[0]:
             log ("Got %d values!\n" % (values_len/6))
@@ -169,7 +164,7 @@ class DHT:
                 n.pinged = 0 
                 break 
 
-            self.lookups.lookup_get_peers(lookup)
+            self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
 
         else:
           log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
@@ -272,7 +267,6 @@ class DHT:
     log ("Lookup time...%.2f\n" % self.lookups.lookup_time)
     log ("Sleep until...%.2f\n" % self.to_sleep)
     return True
-
 
   def ping_node(self, ip, port):
     tid = util.make_tid("pn", util.make_lid())

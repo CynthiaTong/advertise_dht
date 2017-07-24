@@ -59,14 +59,10 @@ class DHTLookup:
     # update lookup_time 
     self.lookup_time = getruntime()
 
-  def lookup_step(self, lookup, callback, version, finished=0):
-
-    # if lookup.done:
-    #   return callback(DHT_EVENT_LOOKUP_DONE, lookup.id)
-
+  def lookup_step(self, lookup, callback, version, alpha=3, finished=0):
+    log ("ALPHA: ", alpha, "\n")
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
-    # log ("All replied: ", all_replied, "\n")
     # if we have k live nodes or as many as we can get 
     if all_replied or finished:
       # finished for pure lookup 
@@ -100,14 +96,16 @@ class DHTLookup:
 
     # if not all replied 
     # ignore too frequent lookups 
-    if lookup.step_time > getruntime() - 5:
+    if lookup.step_time > getruntime() - 1:
+      log ("TOO FREQUENT\n")
       return 
 
-    # send alpha (3) get_peers requests 
+    # send alpha get_peers requests to nodes we have NOT queried 
     send_count = 0 
     for n in lookup.get_nodes():
-      send_count += self.lookup_get_peers(lookup, version, n)
-      if send_count >= 3:
+      if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
+        send_count += self.lookup_get_peers(lookup, version, n)
+      if send_count >= alpha:
         break 
 
     lookup.step_time = getruntime()
@@ -119,12 +117,7 @@ class DHTLookup:
       return callback(DHT_EVENT_LOOKUP_DONE, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))
     log ("LOOKUP DOOOOOOOOOOOOOONE!!!!!!!!!!!!!\n")
 
-  def lookup_get_peers(self, lookup, version, node=None):
-    if not node:
-      for n in lookup.get_nodes():
-        if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
-          node = n 
-          break 
+  def lookup_get_peers(self, lookup, version, node):
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
       return 0 
 
@@ -203,12 +196,8 @@ class Lookup:
       else: # node is closer  
         self.list.insert(i, lookup_node)
         if len(self.list) > self.capacity:
-          # remove the furthest node that hasn't replied 
-          i = len(self.list) -1 
-          while self.list[i].replied and i >= 0:
-            i -= 1 
-          if not self.list[i].replied:
-            self.list.pop(i)
+          # just pop the last (furthest) node, whether it has replied or not 
+          self.list.pop()
         return 
     # if there's room in capacity after looping through self.list, just append new node 
     if len(self.list) < self.capacity:
