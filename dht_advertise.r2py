@@ -124,6 +124,8 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
   if version:
     version = str(version) 
  
+  dhtadvertise_setup(my_id, version)
+
   while True:
     if mycontext["setup"]:
       mycontext['lock'].acquire(True)

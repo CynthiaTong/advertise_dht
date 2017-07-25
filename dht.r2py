@@ -9,7 +9,7 @@ random = dy_import_module("random.r2py")
 
 TOKEN_SIZE = 16 
 K_SIZE = 8 
-DHT_EVENT_VALUES = 1
+DHT_EVENT_VALUES = 3
 
 class DHT:
 
@@ -105,7 +105,7 @@ class DHT:
 
                   # insert into the corresponding lookup  
                   if lookup: 
-                    lookup.insert(n_id, n_ip, n_port)
+                    lookup.insert(n_id, n_ip, n_port, 0, token, token_len)
 
                 if lookup: 
                   # 1 means this node has replied 
@@ -116,10 +116,10 @@ class DHT:
                   else:
                     self.lookups.stable_results = 0  
 
-                  log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
+                  # log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
             
                   # avoid too frequent lookup steps 
-                  sleep(1)
+                  sleep(0.1)
                   # if we haven't seen a new closest node for alpha(3) times 
                   if self.lookups.stable_results >= 3:
                     # query ALL lookup nodes that haven't replied 
@@ -151,7 +151,7 @@ class DHT:
           lid = util.tid_match(tid, "ap")
           lookup = self.lookups.find_lookup_by_tid(lid) 
           if lookup == None:
-            log ("Unknown lookup!\n")
+            log ("Unknown announce_peer lookup!\n")
             self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
           else:
             self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
@@ -186,8 +186,7 @@ class DHT:
         self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
         if util.string_to_long(info_hash) == 0:
           log ("Got get_peers with no info_hash\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 
-                              203, "Get_peers with no infohash.", self.version_id)
+          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", self.version_id)
         else:
           peers_list = self.storage.retrieve(info_hash)
           token = util.make_token(source_ip, self.secret_package[1])
@@ -239,7 +238,7 @@ class DHT:
       self.lookups.lookup_time = 0 
       for l in lks:
         if not l.done:
-          l_time = l.step_time + 15 + random.random_int_below(10)    # next lookup in 15 - 25 seconds 
+          l_time = l.step_time + 5 + random.random_int_below(10)    # next lookup in 5 - 15 seconds 
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
             # log ("L time...%.2f\n" % self.lookups.lookup_time)
@@ -267,6 +266,7 @@ class DHT:
     log ("Lookup time...%.2f\n" % self.lookups.lookup_time)
     log ("Sleep until...%.2f\n" % self.to_sleep)
     return True
+
 
   def ping_node(self, ip, port):
     tid = util.make_tid("pn", util.make_lid())
