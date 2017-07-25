@@ -299,3 +299,86 @@ def invalid_address(ip, port):
     if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
       return True 
     return False  
+
+
+"""
+  The Bencode encoder and decoder functions are Inspired by: 
+  Utku Demir's bencoder at https://github.com/utdemir/bencoder/
+"""
+def encoder(obj):
+  if isinstance(obj, int):
+    return "i" + str(htons(obj)) + "e"
+  elif isinstance(obj, str):
+    return str(len(obj)) + ":" + obj 
+  elif isinstance(obj, list):
+    return "l" + "".join([encoder(n) for n in obj]) + "e"
+  elif isinstance(obj, dict):
+    all_key_str = True 
+    for n in obj.keys():
+      if not isinstance(n, str):
+        all_key_str = False 
+        break 
+    if all_key_str:
+      items = list(obj.items())
+      items.sort()
+      return_val = "d"
+      for item in items:
+        for n in item:
+          return_val += encoder(n)
+      return_val += "e"
+      return return_val 
+    else:
+      raise ValueError("Dictionary keys should be of type string.")
+  else:
+    raise ValueError("Allowed Bencode types: int, string, list, dict. Not: ", type(obj))
+
+def decoder(s):
+  if not isinstance(s, str):
+    raise ValueError("Only string type can be decoded.")
+
+  def _decode(i):
+    if s[i] == "i":
+      j = i + 1 
+      int_val = "" 
+      while s[j].isdigit() and not s[j] == "e":
+        int_val += s[j]
+        j += 1 
+      if not s[j] == "e":
+        raise ValueError("Malformed input.")
+      return int(int_val), j
+    elif s[i] == "l" or s[i] == "d":
+      l = list()
+      j = i + 1 
+      while j < len(s):
+        elem, j = _decode(j)
+        l.append(elem)
+        # if it's end of collection signaled by "e", break 
+        if j < len(s) and s[j] == "e":
+          j += 1
+          break 
+      if s[i] == "l":
+        return l, j  
+      else:
+        return_dict = dict()
+        n = 0 
+        while n + 1 < len(l):
+          return_dict[l[n]] = l[n + 1]
+          n += 2 
+        return return_dict, j   
+    elif s[i].isdigit():
+      length = "" 
+      while s[i].isdigit() and not s[i] == ":":
+        length += s[i]
+        i += 1 
+      length = int(length) 
+      i += 1
+      val = s[i: i + length]
+      return val, i + length
+    else:
+      raise ValueError("Malformed input: " + s[i:])
+
+  return_val, i = _decode(0)
+  if i < len(s):
+    raise ValueError("Malformed input.")
+
+  return return_val 
