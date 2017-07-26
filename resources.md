@@ -4,23 +4,19 @@
 ### Resources 
 
 - projects 
-  
-  [kademlia by bmuller](https://github.com/bmuller/kademlia/tree/master/kademlia)
-
-  [KadNode by mwarning](https://github.com/mwarning/KadNode)
 
   [dht by jech](https://github.com/jech/dht)
-  
-  [dns-via-dht by maboiteaspam](https://github.com/maboiteaspam/dns-via-dht)
-  
-  [bittorrent-dht by webtorrent](https://github.com/webtorrent/bittorrent-dht)
 
+  [KadNode by mwarning](https://github.com/mwarning/KadNode)
+    
+  [bittorrent-dht by webtorrent](https://github.com/webtorrent/bittorrent-dht)
+  
 - readings 
 
-  [BitTorrent DHT Protocol](http://www.bittorrent.org/beps/bep_0005.html)
-
-  [Kademlia: A Design Specification](http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#key)
+  [BitTorrent DHT Protocol (BEP5)](http://www.bittorrent.org/beps/bep_0005.html)
+  
+  [Storing arbitrary data in the DHT (BEP44)](http://www.bittorrent.org/beps/bep_0044.html)
   
   [Kademlia: A Peer-to-peer Information System Based on the XOR Metric](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf)
 
- 
+  [Kademlia: A Design Specification](http://xlattice.sourceforge.net/components/protocol/kademlia/specs.html#key)
