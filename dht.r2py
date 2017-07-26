@@ -74,6 +74,8 @@ class DHT:
               lookup = self.lookups.find_lookup_by_tid(lid) 
               old_closest_node = lookup.get_nodes()[0]
 
+              if lookup.lookup_done: 
+                return 
               log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
               # check nodes_len is normal 
               if not nodes_len % 26 == 0:
@@ -147,7 +149,7 @@ class DHT:
               return callback(DHT_EVENT_VALUES, lookup.id, filtered_values, len(filtered_values))
 
         elif util.tid_match(tid, "ap"):  
-          log ("Got reply to announce_peer!\n")
+          # log ("Got reply to announce_peer from: %s %d\n" %(source_ip, source_port))
           lid = util.tid_match(tid, "ap")
           lookup = self.lookups.find_lookup_by_tid(lid) 
           if lookup == None:
@@ -155,8 +157,12 @@ class DHT:
             self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
           else:
             self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-            for n in lookup.get_nodes():
-              if n.id == sender_id:
+            acked = 0 
+            for n in lookup.get_good_nodes():
+              if n.ip == source_ip and n.port == source_port:
+                # the node has acked already 
+                acked = n.acked
+
                 n.last_req = 0 
                 n.replied = 1 
                 n.last_replied = getruntime()
@@ -164,7 +170,9 @@ class DHT:
                 n.pinged = 0 
                 break 
 
-            self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
+            if not acked: 
+              log ("Got new reply to announce_peer from: %s %d\n" %(source_ip, source_port))
+              self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
 
         else:
           log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))

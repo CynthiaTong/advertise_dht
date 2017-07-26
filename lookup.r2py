@@ -69,30 +69,32 @@ class DHTLookup:
     all_replied = lookup.all_replied()
     # if we have k live nodes or as many as we can get 
     if all_replied or finished:
+      lookup.lookup_done = 1 
       # finished for pure lookup 
       log ("Lookup Port: %d\n" % lookup.port)
       if lookup.port == 0:
         self.lookup_finished(lookup, callback)
       else: 
-        all_acked = True 
+        all_acked = 0  
         count = 0 
         for n in lookup.get_good_nodes():
-          # if n.pinged >= 3:
-          #   continue 
-          # if n.token == None: # ?? 
-          #   n.acked = 1 
-          if not n.acked:
-            all_acked = False 
-            log ("Sending announce peer. \n")
+          # unreliable node 
+          if n.pinged >= 3:
+            continue 
+          if n.acked:
+            all_acked += 1 
+          elif not n.acked and n.token:
+            log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
             tid = util.make_tid("ap", lookup.tid)
-            rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, len(n.token), version)
+            rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, version)
             n.pinged += 1 
             n.last_req = getruntime()
             # find node with this id in routing table 
             router_node = self.router.find_node(n.long_id)
             if router_node:
               self.router.pinged(router_node)
-        if all_acked:
+
+        if all_acked >= 8:
           log ("All acked - thus finished! \n")
           self.lookup_finished(lookup, callback, announce=True) 
       lookup.step_time = getruntime()
@@ -107,7 +109,7 @@ class DHTLookup:
     # send alpha get_peers requests to nodes we have NOT queried 
     send_count = 0 
     for n in lookup.get_nodes():
-      if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 1:
+      if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
         send_count += self.lookup_get_peers(lookup, version, n)
       if send_count >= alpha:
         break 
@@ -126,7 +128,6 @@ class DHTLookup:
         else:
           return callback(DHT_EVENT_LOOKUP_DONE, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))
 
-    log ("LOOKUP DOOOOOOOOOOOOOONE!!!!!!!!!!!!!\n")
 
   def lookup_get_peers(self, lookup, version, node):
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
@@ -167,6 +168,7 @@ class Lookup:
     self.port = 0  # 0 for pure searches 
     self.step_time = 0 
     self.done = 0 
+    self.lookup_done = 0 
     self.list = list() # sorted: closest at head, furthest at tail 
 
   # Insert into the lookup list: 
