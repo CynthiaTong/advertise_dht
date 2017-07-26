@@ -119,3 +119,50 @@ def send_error(ip, port, tid, tid_len, error_code, error_msg, v=None):
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
     return send(buf, ip, port)
+
+"""
+  PUT 
+"""
+
+def put(self_id, value, ip, port, token, opts=None):
+  # for key, val in opts.items():
+  #   log (key, " ", val, "\n")
+  tid = util.make_tid("pt", util.make_lid())
+  msg = {
+    'a': {
+      'id': self_id,
+      'token': token,
+      'v': value 
+    },
+    't': tid, 
+    'y': 'q',
+    'q': 'put'
+  }
+
+  key = None 
+  if opts:
+    msg['a']['k'] = opts['k']
+    msg['a']['seq'] = opts['seq']
+
+    if opts.has_key('salt'):
+      key = sha.sha_hash(opts['k'] + opts['salt'])
+      msg['a']['salt'] = opts['salt']
+    else:
+      key = sha.sha_hash(opts['k'])
+
+    if opts.has_key('cas'):
+      msg['a']['cas'] = opts['cas']
+  else:
+    key = sha.sha_hash(value)
+
+  msg = util.encoder(msg)
+  log (msg, "\n")
+  send(msg, ip, port)
+
+  # return key 
+  return msg 
+
+def send_put(self_id, ip, port, tid):
+  msg = util.encoder({"r":{"id": self_id}, "t": tid, "y": "r"})
+  send(msg, ip, port)
+

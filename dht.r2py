@@ -35,196 +35,244 @@ class DHT:
         return self.periodic(callback)
 
       msg = util.parse_message(buf)
-      if msg == -1:
-        return self.periodic(callback)
-
       # log (msg, "\n")
-      (msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
-      nodes, nodes_len, values, values_len) = msg 
-
-      nodes_len = int(nodes_len)
-      values_len = int(values_len)
-      token_len= int(token_len)
-
-      if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
-        log ("Faulty message - unparseable: \n", buf, "\n")
+      if msg == -1:
+        rpc.send_error(source_ip, source_port, tid, tid_len, 201, "Unknown query", self.version_id) 
         return self.periodic(callback)
+      # if put/get req 
+      elif isinstance(msg, dict):
+        if msg['q'] == "put":
+          log ("Put!\n")
+          self.verify_get(msg, source_ip, source_port)
+          sender_id = msg['a']['id']
+          self.storage.store_value(sender_id, msg)
+          return rpc.send_put(self.id, source_ip, source_port, msg['t'])
 
-      if sender_id == self.id and source_ip == getmyip():
-        log ("Received message from self. weird.\n")
-        return self.periodic(callback)
+        elif msg['q'] == "get":            
+          log ("Get!\n")
 
-      ## Rate control ?? 
+        else: 
+          log ("Unknown query: %s\n" % msg['q'])
+          return rpc.send_error(source_ip, source_port, tid, tid_len, 201, "Unknown query", self.version_id) 
 
-      if msg_type == "REPLY":
-        if not tid_len == len(tid):
-          log ("Broken tid: ", tid, "\n")
+      # msg is not get/put 
+      else:
+        (msg_type, tid, tid_len, sender_id, info_hash, target, port, token, token_len,
+        nodes, nodes_len, values, values_len) = msg 
+
+        nodes_len = int(nodes_len)
+        values_len = int(values_len)
+        token_len= int(token_len)
+
+        if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
+          log ("Faulty message - unparseable: \n", buf, "\n")
           return self.periodic(callback)
 
-        if util.tid_match(tid, "pn"):
-          log ("Pong!\n")
-          self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
+        if sender_id == self.id and source_ip == getmyip():
+          log ("Received message from self. weird.\n")
+          return self.periodic(callback)
 
-        elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
-          lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
+        if msg_type == "REPLY":
+          if not tid_len == len(tid):
+            log ("Broken tid: ", tid, "\n")
+            return self.periodic(callback)
 
-          # try to find among existing lookups by searching lid 
-          for lid in lids:
-            if lid:
-              lookup = self.lookups.find_lookup_by_tid(lid) 
-              old_closest_node = lookup.get_nodes()[0]
+          if util.tid_match(tid, "pn"):
+            log ("Pong!\n")
+            self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
 
-              if lookup.lookup_done: 
-                break 
-              log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
-              # check nodes_len is normal 
-              if not nodes_len % 26 == 0:
-                log ("Unexpected length for node info!\n")
-              elif lid == lids[0] and lookup == None:
-                log ("Unknown lookup!\n")
-                self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
-              else: # nodes_len normal & existing lookup - it's a proper reply 
-                self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-                i = 0 
-                while i <= nodes_len - 26:
-                  n = nodes[i:i+26]
-                  # convert id, ip and port to host order and readable format 
-                  n_id = ""
-                  for x in n[:20]:
-                    n_id += chr(int(x))
+          elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
+            lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
 
-                  ip_strs = list()
-                  for x in n[20:24]:
-                    ip_strs.append(str(x))
-                  n_ip = ".".join(ip_strs)
+            # try to find among existing lookups by searching lid 
+            for lid in lids:
+              if lid:
+                lookup = self.lookups.find_lookup_by_tid(lid) 
+                old_closest_node = lookup.get_nodes()[0]
 
-                  n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
-                  i += 26 
-                  # log (n_ip, ": ", n_port, "\n")
-                  if n_id == self.id:
-                    continue;
-                  self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
+                if lookup.lookup_done: 
+                  break 
+                log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
+                # check nodes_len is normal 
+                if not nodes_len % 26 == 0:
+                  log ("Unexpected length for node info!\n")
+                elif lid == lids[0] and lookup == None:
+                  log ("Unknown lookup!\n")
+                  self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
+                else: # nodes_len normal & existing lookup - it's a proper reply 
+                  self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+                  i = 0 
+                  while i <= nodes_len - 26:
+                    n = nodes[i:i+26]
+                    # convert id, ip and port to host order and readable format 
+                    n_id = ""
+                    for x in n[:20]:
+                      n_id += chr(int(x))
 
-                  # insert into the corresponding lookup  
+                    ip_strs = list()
+                    for x in n[20:24]:
+                      ip_strs.append(str(x))
+                    n_ip = ".".join(ip_strs)
+
+                    n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
+                    i += 26 
+                    # log (n_ip, ": ", n_port, "\n")
+                    if n_id == self.id:
+                      continue;
+                    self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
+
+                    # insert into the corresponding lookup  
+                    if lookup: 
+                      lookup.insert(n_id, n_ip, n_port, 0, token, token_len)
+
                   if lookup: 
-                    lookup.insert(n_id, n_ip, n_port, 0, token, token_len)
+                    # 1 means this node has replied 
+                    lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
+                    # if we failed to get a new closest node, increment stable_results
+                    if old_closest_node == lookup.get_nodes()[0]: 
+                      self.lookups.stable_results += 1 
+                    else:
+                      self.lookups.stable_results = 0  
 
-                if lookup: 
-                  # 1 means this node has replied 
-                  lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-                  # if we failed to get a new closest node, increment stable_results
-                  if old_closest_node == lookup.get_nodes()[0]: 
-                    self.lookups.stable_results += 1 
-                  else:
-                    self.lookups.stable_results = 0  
+                    # log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
+              
+                    # avoid too frequent lookup steps 
+                    sleep(0.1)
+                    # if we haven't seen a new closest node for alpha(3) times 
+                    if self.lookups.stable_results >= 3:
+                      # query ALL lookup nodes that haven't replied 
+                      self.lookups.lookup_step(lookup, callback, self.version_id, alpha=14)
+                    else:
+                      # query another alpha nodes that haven't replied 
+                      self.lookups.lookup_step(lookup, callback, self.version_id)
 
-                  # log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
-            
-                  # avoid too frequent lookup steps 
-                  sleep(0.1)
-                  # if we haven't seen a new closest node for alpha(3) times 
-                  if self.lookups.stable_results >= 3:
-                    # query ALL lookup nodes that haven't replied 
-                    self.lookups.lookup_step(lookup, callback, self.version_id, alpha=14)
-                  else:
-                    # query another alpha nodes that haven't replied 
-                    self.lookups.lookup_step(lookup, callback, self.version_id)
+            if values_len > 0 and lids[0]:
+              # log ("Got %d values!\n" % (values_len/6))
+              lookup = self.lookups.find_lookup_by_tid(lids[0]) 
+              filtered_values = list()
+              i = 0 
+              while i < values_len:
+                v = values[i:i+6]
+                ip_strs = list()
+                for x in v[0:4]:
+                  ip_strs.append(str(x))
+                v_ip = ".".join(ip_strs)
 
-          if values_len > 0 and lids[0]:
-            # log ("Got %d values!\n" % (values_len/6))
-            lookup = self.lookups.find_lookup_by_tid(lids[0]) 
-            filtered_values = list()
-            i = 0 
-            while i < values_len:
-              v = values[i:i+6]
-              ip_strs = list()
-              for x in v[0:4]:
-                ip_strs.append(str(x))
-              v_ip = ".".join(ip_strs)
+                v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
+                i += 6
+                filtered_values.append((v_ip, v_port))
+                # log (v_ip, ": ", v_port, "\n")
 
-              v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
-              i += 6
-              filtered_values.append((v_ip, v_port))
-              # log (v_ip, ": ", v_port, "\n")
+              # since we've got values, stop the lookup and return callback 
+              if callback and not lookup.done:
+                return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
-            # since we've got values, stop the lookup and return callback 
-            if callback and not lookup.done:
-              return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
+          elif util.tid_match(tid, "ap"):  
+            # log ("Got reply to announce_peer from: %s %d\n" %(source_ip, source_port))
+            lid = util.tid_match(tid, "ap")
+            lookup = self.lookups.find_lookup_by_tid(lid) 
+            if lookup == None:
+              log ("Unknown announce_peer lookup!\n")
+              self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
+            else:
+              self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+              acked = 0 
+              for n in lookup.get_good_nodes():
+                if n.ip == source_ip and n.port == source_port:
+                  # the node has acked already 
+                  acked = n.acked
 
-        elif util.tid_match(tid, "ap"):  
-          # log ("Got reply to announce_peer from: %s %d\n" %(source_ip, source_port))
-          lid = util.tid_match(tid, "ap")
-          lookup = self.lookups.find_lookup_by_tid(lid) 
-          if lookup == None:
-            log ("Unknown announce_peer lookup!\n")
-            self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
+                  n.last_req = 0 
+                  n.replied = 1 
+                  n.last_replied = getruntime()
+                  n.acked = 1 
+                  n.pinged = 0 
+                  break 
+
+              if not acked: 
+                log ("Got new reply to announce_peer from: %s %d\n" %(source_ip, source_port))
+                self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
+
           else:
-            self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-            acked = 0 
-            for n in lookup.get_good_nodes():
-              if n.ip == source_ip and n.port == source_port:
-                # the node has acked already 
-                acked = n.acked
+            log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
 
-                n.last_req = 0 
-                n.replied = 1 
-                n.last_replied = getruntime()
-                n.acked = 1 
-                n.pinged = 0 
-                break 
+        elif msg_type == "PING":
+          log ("Ping!\n")
+          self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+          log ("Sending pong.\n")
+          return rpc.pong(self.id, source_ip, source_port, tid, tid_len, self.version_id)
 
-            if not acked: 
-              log ("Got new reply to announce_peer from: %s %d\n" %(source_ip, source_port))
-              self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
+        elif msg_type == "FIND_NODE":
+          log ("Find node!\n")
+          self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+          log ("Sending closest node to find_node req.\n")
+          return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target, self.version_id)
 
-        else:
-          log ("Unexpected reply: \n%s (%d)\n" % (buf, len(buf)))
-
-      elif msg_type == "PING":
-        log ("Ping!\n")
-        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        log ("Sending pong.\n")
-        rpc.pong(self.id, source_ip, source_port, tid, tid_len, self.version_id)
-
-      elif msg_type == "FIND_NODE":
-        log ("Find node!\n")
-        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        log ("Sending closest node to find_node req.\n")
-        rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target, self.version_id)
-
-      elif msg_type == "GET_PEERS":
-        log ("Get peers!\n")
-        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        if util.string_to_long(info_hash) == 0:
-          log ("Got get_peers with no info_hash\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", self.version_id)
-        else:
-          peers_list = self.storage.retrieve(info_hash)
-          token = util.make_token(source_ip, self.secret_package[1])
-          if peers_list:
-            log ("Sending found peers.\n")
-            rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
-                                        token, TOKEN_SIZE, peers_list, self.version_id)
+        elif msg_type == "GET_PEERS":
+          log ("Get peers!\n")
+          self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+          if util.string_to_long(info_hash) == 0:
+            log ("Got get_peers with no info_hash\n")
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", self.version_id)
           else:
-            log ("Sending nodes for get_peers.\n")
-            rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, self.version_id)
+            peers_list = self.storage.retrieve(info_hash)
+            token = util.make_token(source_ip, self.secret_package[1])
+            if peers_list:
+              log ("Sending found peers.\n")
+              return rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
+                                          token, TOKEN_SIZE, peers_list, self.version_id)
+            else:
+              log ("Sending nodes for get_peers.\n")
+              return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, self.version_id)
 
-      elif msg_type == "ANNOUNCE_PEER":
-        log ("Announce peer!\n")
-        self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-        if util.string_to_long(info_hash) == 0:
-          log ("Got announce_peer with no info_hash\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash.", self.version_id)   
-        if port == 0:
-          log ("Got announce_peer with port 0\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number.", self.version_id)   
-        if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
-          log ("Got announce_peer with invalid token\n")
-          rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token.", self.version_id) 
+        elif msg_type == "ANNOUNCE_PEER":
+          log ("Announce peer!\n")
+          self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
+          if util.string_to_long(info_hash) == 0:
+            log ("Got announce_peer with no info_hash\n")
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash", self.version_id)   
+          if port == 0:
+            log ("Got announce_peer with port 0\n")
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number", self.version_id)   
+          if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
+            log ("Got announce_peer with invalid token\n")
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token", self.version_id) 
 
-        self.storage.store(sender_id, source_ip, source_port)
-        log ("Sending peer announced.\n")
-        rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len, self.version_id)
+          self.storage.store(sender_id, source_ip, source_port)
+          log ("Sending peer announced.\n")
+          return rpc.peer_announced(self.id, source_ip, source_port, tid, tid_len, self.version_id)
+
+
+  def verify_get(self, msg, source_ip, source_port):
+    try: 
+      value = msg['a']['v']
+      opts = msg['a']
+      tid = msg['t']
+      token = msg['a']['token']
+      sender_id = msg['a']['id']
+      st = self.storage.retrieve_value(sender_id)
+
+      if len(util.encoder(value)) >= 1000:
+        rpc.send_error(source_ip, source_port, tid, len(tid), 205, "Message too big", self.version_id)
+
+      if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
+        rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Invalid token", self.version_id)
+
+      if opts.has_key('salt') and len(opts['salt']) > 64:
+        rpc.send_error(source_ip, source_port, tid, len(tid), 207, "Salt too big", self.version_id)
+      
+      if st:
+        if opts.has_key('cas') and not opts['cas'] == st['seq']:
+          rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", self.version_id)
+        if opts['seq'] <= st['seq']:
+          rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", self.version_id)
+
+      # TODO: verify signiture - need ed25519 supercop/ref10 support 
+  
+    except:
+      log ("Invalid put request!\n")
+      rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Invalid arguments", self.version_id) 
+      
 
   def periodic(self, callback):
     log ("do periodic stuff.\n")

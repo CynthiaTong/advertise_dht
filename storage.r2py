@@ -1,7 +1,7 @@
-dy_import_module_symbols("util.r2py")
 
-TTL = 32 * 60 
+TTL = 30 * 60 
 # MAX_PEERS = ??
+MAX_VALUES = 1000
 
 class Storage: 
 
@@ -13,6 +13,17 @@ class Storage:
     self.ttl = ttl  
     self.peers = dict() # dictionary of arrays of peer objects 
     self.numpeers = 0 
+    self.values = dict()  # data from put requests 
+    self.numvalues = 0 
+
+  def store_value(self, id_key, value):
+    self.values[id_key] = value 
+    self.values[id_key]['stored_time'] = getruntime()
+    self.numvalues += 1
+    
+  def retrieve_value(self, id_key):
+    if id_key in self.values:
+      return self.values[id_key]
 
   # store the <id, ip, port> triple into peers dict 
   def store(self, id_key, ip, port):
@@ -44,6 +55,12 @@ class Storage:
       self.peers[key] = filtered
       self.numpeers -= len(value) - len(filtered)
 
+    for key, value in self.values.items():
+      if getruntime() - value['stored_time'] > 4 * self.ttl:    # typically values expire every 2 hours
+        del self.values[key]
+        self.numvalues -= 1 
+
+
   def __iter__(self):
     return iter(self.peers)
 
@@ -54,18 +71,6 @@ class Storage:
         output += str(p) + "\t" 
       output += "\n"
     return output 
-
-  # def set(self, key, value):
-  #   if key in self.peers:
-  #     self.peers[key][0] = getruntime()
-  #   else: 
-  #     self.peers[key] = (getruntime(), value)   
-
-  # def get(self, key):
-  #   if key in self.peers:
-  #     return self.peers[key][1] 
-  #   else:
-  #     return None 
 
 class Peer:
   def __init__(self, ip, port, time):
