@@ -8,6 +8,7 @@ LOOKUP_CAPACITY = 14
 DHT_EVENT_SETUP_DONE = 0 
 DHT_EVENT_LOOKUP_DONE = 1
 DHT_EVENT_ANNOUNCE_DONE = 2 
+DHT_EVENT_VALUES = 3
 
 class DHTLookup:
 
@@ -37,7 +38,9 @@ class DHTLookup:
         # get some new lookup nodes 
         l = self.router.get_lookup_nodes(l, target_id)
         l.port = port 
-        self.lookup_step(l, callback, version)
+        # self.lookup_step(l, callback, version)
+        for n in l.get_good_nodes():
+          self.lookup_get_peers(l, version, n)
         break 
 
     if new_lookup:
@@ -78,9 +81,6 @@ class DHTLookup:
         all_acked = 0  
         count = 0 
         for n in lookup.get_good_nodes():
-          # unreliable node 
-          if n.pinged >= 3:
-            continue 
           if n.acked:
             all_acked += 1 
           elif not n.acked and n.token:
@@ -116,11 +116,13 @@ class DHTLookup:
 
     lookup.step_time = getruntime()
 
-  def lookup_finished(self, lookup, callback, announce=False):
+  def lookup_finished(self, lookup, callback, announce=False, values=None):
     lookup.done = 1 
     lookup.step_time = getruntime()
     if callback:
-      if announce:
+      if values:
+        return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
+      elif announce:
         return callback(DHT_EVENT_ANNOUNCE_DONE, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))
       else:
         if lookup.id == self.id:

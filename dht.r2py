@@ -67,7 +67,7 @@ class DHT:
 
         elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
           lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
-          # log ("LIDS: ", lids, "\n")
+
           # try to find among existing lookups by searching lid 
           for lid in lids:
             if lid:
@@ -75,7 +75,7 @@ class DHT:
               old_closest_node = lookup.get_nodes()[0]
 
               if lookup.lookup_done: 
-                return 
+                break 
               log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
               # check nodes_len is normal 
               if not nodes_len % 26 == 0:
@@ -131,7 +131,8 @@ class DHT:
                     self.lookups.lookup_step(lookup, callback, self.version_id)
 
           if values_len > 0 and lids[0]:
-            log ("Got %d values!\n" % (values_len/6))
+            # log ("Got %d values!\n" % (values_len/6))
+            lookup = self.lookups.find_lookup_by_tid(lids[0]) 
             filtered_values = list()
             i = 0 
             while i < values_len:
@@ -145,8 +146,10 @@ class DHT:
               i += 6
               filtered_values.append((v_ip, v_port))
               # log (v_ip, ": ", v_port, "\n")
-            if callback:
-              return callback(DHT_EVENT_VALUES, lookup.id, filtered_values, len(filtered_values))
+
+            # since we've got values, stop the lookup and return callback 
+            if callback and not lookup.done:
+              return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
         elif util.tid_match(tid, "ap"):  
           # log ("Got reply to announce_peer from: %s %d\n" %(source_ip, source_port))
@@ -240,13 +243,16 @@ class DHT:
       if len(lks) > 0:
         for l in lks:
           if not l.done and l.step_time <= getruntime() - 5:
-            self.lookups.lookup_step(l, callback, self.version_id)
+            if l.lookup_done: 
+              self.lookups.lookup_step(l, callback, self.version_id, finished=1)
+            else:
+              self.lookups.lookup_step(l, callback, self.version_id)
 
       # increase lookup_time for next rounds of steps 
       self.lookups.lookup_time = 0 
       for l in lks:
         if not l.done:
-          l_time = l.step_time + 5 + random.random_int_below(10)    # next lookup in 5 - 15 seconds 
+          l_time = l.step_time + 5 + random.random_int_below(5)    # next lookup in 5 - 10 seconds 
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
             # log ("L time...%.2f\n" % self.lookups.lookup_time)
