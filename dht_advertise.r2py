@@ -11,14 +11,17 @@ timeout = 300   # for testing, set it to be a large number
 mycontext["setup"] = False 
 mycontext["announce"] = False 
 mycontext["lookup"] = False 
+mycontext["put"] = False 
+mycontext["get"] = False 
 
-mycontext['lock'] = createlock()
+mycontext["lock"] = createlock()
 
 DHT_EVENT_SETUP_DONE = 0 
 DHT_EVENT_LOOKUP_DONE = 1
 DHT_EVENT_ANNOUNCE_DONE = 2
 DHT_EVENT_VALUES = 3
-
+DHT_EVENT_GET_DONE = 4 
+DHT_EVENT_PUT_DONE = 5
 
 class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
@@ -28,8 +31,8 @@ class DHTAdvertiseError(Exception):
 
 def dhtadvertise_setup(my_id, my_version=None):
   try: 
-    mycontext['dht'] = dht_module.DHT(my_id, my_version)
-    mycontext['lock'].acquire(True)
+    mycontext["dht"] = dht_module.DHT(my_id, my_version)
+    mycontext["lock"].acquire(True)
     listen = call_listen("setup")
     createthread(listen)
 
@@ -37,8 +40,8 @@ def dhtadvertise_setup(my_id, my_version=None):
       ip = gethostbyname(p[0])
       port = p[1]
       # ping_node is the "hard" way to bootstrap - it actually sends messages to the pinged node 
-      # if we don't have anything in the peersfile yet, use this  
-      mycontext['dht'].ping_node(ip, port)
+      # if we don"t have anything in the peersfile yet, use this  
+      mycontext["dht"].ping_node(ip, port)
 
       sleep(0.05)
 
@@ -47,7 +50,7 @@ def dhtadvertise_setup(my_id, my_version=None):
 
   sleep(0.5)
 
-  mycontext['dht'].lookups.dht_lookup(my_id, 0, callback, my_version)    # lookup my_id 
+  mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version)    # lookup my_id 
 
   # call periodic 
   createthread(periodic)
@@ -55,8 +58,8 @@ def dhtadvertise_setup(my_id, my_version=None):
 
 def periodic():
   while True:
-    if mycontext['dht'].to_sleep <= getruntime():
-      mycontext['dht'].periodic(callback)
+    if mycontext["dht"].to_sleep <= getruntime():
+      mycontext["dht"].periodic(callback)
 
 def call_listen(operation_type):
   def listen():
@@ -68,7 +71,7 @@ def call_listen(operation_type):
         break 
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
-        mycontext['dht'].new_message(message, remoteip, remoteport, callback)
+        mycontext["dht"].new_message(message, remoteip, remoteport, callback)
 
       except SocketWouldBlockError:
         sleep(0.1)
@@ -76,7 +79,7 @@ def call_listen(operation_type):
         break
 
     udpresponsesocket.close()
-    mycontext['lock'].release()
+    mycontext["lock"].release()
 
     if not mycontext[operation_type]:
       if operation_type == "setup":
@@ -89,6 +92,12 @@ def call_listen(operation_type):
     if not operation_type == "setup":
       exitall()
 
+    # if operation_type == "announce":
+    #   dhtadvertise_lookup(id, rand, callback, version="AD\0\0")
+
+    # if operation_type == "lookup":
+    #   exitall()
+
   return listen 
 
 
@@ -97,14 +106,22 @@ def callback(event, id, data, data_len):
   if event == DHT_EVENT_SETUP_DONE:
     output = "=========================\nSetup done. ID: %s\n" % id 
     mycontext["setup"] = True 
-  elif event == DHT_EVENT_LOOKUP_DONE:
-    output = "=========================\nLookup done. ID: %s\n" % id 
-    mycontext["lookup"] = True 
   elif event == DHT_EVENT_ANNOUNCE_DONE:
     output = "=========================\nAnnouncement done. ID: %s\n" % id 
     mycontext["announce"] = True 
+  elif event == DHT_EVENT_LOOKUP_DONE:
+    output = "=========================\nLookup done. ID: %s\n" % id 
+    mycontext["lookup"] = True
   elif event == DHT_EVENT_VALUES:
     output = "=========================\nReceived values. ID: %s\n" % id 
+    mycontext["lookup"] = True 
+  elif event == DHT_EVENT_PUT_DONE:
+    output = "=========================\nPut done. ID: %s\n" % id 
+    mycontext["put"] = True 
+  elif event == DHT_EVENT_GET_DONE:
+    output = "=========================\nGet done. ID: %s\n" % id 
+    mycontext["get"] = True 
+
 
   if data:
     output += "Nodes (%d): \n" % data_len
@@ -123,15 +140,16 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
   target_id = str(target_id)
   if version:
     version = str(version) 
- 
-  dhtadvertise_setup(my_id, version)
 
+  if not mycontext["setup"]:
+    dhtadvertise_setup(my_id, version)
+ 
   while True:
     if mycontext["setup"]:
-      mycontext['lock'].acquire(True)
+      mycontext["lock"].acquire(True)
       listen = call_listen("lookup")
       createthread(listen)
-      mycontext['dht'].lookups.dht_lookup(target_id, 0, callback, version)
+      mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
 
 
 """
@@ -145,67 +163,62 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
   if port < 1 or port > 65535:
     raise ValueError("Port number must be in range: 1 - 65535.")
 
-  dhtadvertise_setup(my_id, version)
+  if not mycontext["setup"]:
+    dhtadvertise_setup(my_id, version)
 
   while True:
     if mycontext["setup"]:
-      mycontext['lock'].acquire(True)
+      mycontext["lock"].acquire(True)
       listen = call_listen("announce")
       createthread(listen)
-      mycontext['dht'].lookups.dht_lookup(target_id, port, callback, version)
+      mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
 
 
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, target_id, target_port, **opts):
-  
+def dhtadvertise_put(my_id, value, callback, **opts): 
+  if not value:
+    raise ValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
     raise ValueError("DHT Put: values must be under 1000 bytes.")
   if opts:
-    if opts.has_key('cas') and not isinstance(opts['cas'], int):
+    if opts.has_key("cas") and not isinstance(opts["cas"], int):
       raise ValueError("Mutable DHT put: cas must be an Integer if provided.")
-    if not (opts.has_key('k') and len(opts['k']) == 32):
+    if not (opts.has_key("k") and len(opts["k"]) == 32):
       raise ValueError("Mutable DHT put: 32-byte k ed25519 public key is required.")
-    if not (opts.has_key('sig') and len(opts['sig']) == 64):
+    if not (opts.has_key("sig") and len(opts["sig"]) == 64):
       raise ValueError("Mutable DHT put: 64-byte signature is required.")
-    if opts.has_key('salt') and len(opts['salt']) > 64:
+    if opts.has_key("salt") and len(opts["salt"]) > 64:
       raise ValueError("Mutable DHT put: salt must be no larger than 64 bytes if provided.")
-    if not opts.has_key('seq'):
+    if not opts.has_key("seq"):
       raise ValueError("Mutable DHT put: sequence number is required.")
-    if not isinstance(opts['seq'], int):
+    if not isinstance(opts["seq"], int):
       raise ValueError("Mutable DHT put: sequence number must be an Integer.")
 
-  return _dhtadvertise_put(my_id, value, target_id, target_port, opts)
-
-
-def _dhtadvertise_put(my_id, value, target_id, target_port, opts):
-  # for key, val in opts.items():
-  #   log (key, " ", val, "\n")
+  # for immutable items, key is the SHA-1 hash of the value stored 
+  # for mutable items, key is the SHA-1 hash of k(public key) + salt if salt exists
   key = None 
   if opts:
-    if opts.has_key('salt'):
-      key = sha.sha_hash(opts['k'] + opts['salt'])
+    if opts.has_key("salt"):
+      key = sha.sha_hash(opts["k"] + opts["salt"])
     else:
-      key = sha.sha_hash(opts['k'])
+      key = sha.sha_hash(opts["k"])
   else:
     key = sha.sha_hash(value)
 
-  tid = util.make_tid("pt", 1000)
+  if not mycontext["setup"]:
+    dhtadvertise_setup(my_id)
 
-  msg = {
-    'a': {
-      'id': my_id,
-      'v': value 
-    },
-    't': tid, 
-    'y': 'q',
-    'q': 'put'
-  }
+  while True:
+    if mycontext["setup"]:
+      mycontext["lock"].acquire(True)
+      listen = call_listen("put")
+      createthread(listen)
+      # 2 for put lookup
+      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
 
-  msg = util.encoder(msg)
-  log (msg, "\n")
-  rpc.send(msg, target_id, target_port)
+  return key  # return key for future lookup 
 
 
 # if the values we're looking for exist in local storage 
