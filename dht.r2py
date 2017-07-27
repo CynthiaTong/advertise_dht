@@ -23,7 +23,7 @@ class DHT:
     self.storage = storage.Storage(self.id) 
     self.secret_package = util.rotate_secret() 
     self.refresh_buckets_time = getruntime() + random.random_int_below(3)
-    self.to_sleep = getruntime()
+    self.to_sleep = getruntime() + 5 + random.random_int_below(10)  # first periodic call in 5 - 15 sec
 
     # bucket_grow_time for mybucket maintenance? 
     # token_bucket_time for rate control?

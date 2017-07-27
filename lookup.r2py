@@ -45,7 +45,7 @@ class DHTLookup:
 
     if new_lookup:
       self.lookup_id += 1 
-      newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY)
+      newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY, port)
       oldest = None 
       # find the oldest lookup
       for l in self.lookups:
@@ -59,7 +59,7 @@ class DHTLookup:
         self.lookups.append(newest)
 
       newest = self.router.get_lookup_nodes(newest, target_id)
-      newest.port = port 
+      # newest.port = port 
       # log ("new ")
       self.lookup_step(newest, callback, version)
       # log (newest.get_all_ids(), "\n")
@@ -162,12 +162,12 @@ class DHTLookup:
 
 class Lookup:
 
-  def __init__(self, string_id, tid, capacity):
+  def __init__(self, string_id, tid, capacity, port=0):
     self.id = string_id
     self.target_id = util.string_to_long(self.id)
     self.capacity = capacity
     self.tid = tid 
-    self.port = 0  # 0 for pure searches 
+    self.port = port  # 0 for pure searches 
     self.step_time = 0 
     self.done = 0 
     self.lookup_done = 0 
