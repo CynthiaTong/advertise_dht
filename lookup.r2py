@@ -11,6 +11,7 @@ DHT_EVENT_ANNOUNCE_DONE = 2
 DHT_EVENT_VALUES = 3
 DHT_EVENT_GET_DONE = 4 
 DHT_EVENT_PUT_DONE = 5
+DHT_EVENT_VALUE_ITEM = 6 
 
 class DHTLookup:
 
@@ -151,7 +152,10 @@ class DHTLookup:
     if callback:
       event = -1 
       if values:
-        return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
+        if lookup.port == 1:
+          return callback(DHT_EVENT_VALUE_ITEM, lookup.id, values)
+        else:
+          return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
       elif lookup.port > 2:
         event = DHT_EVENT_ANNOUNCE_DONE
       elif lookup.port == 2:

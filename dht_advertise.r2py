@@ -22,6 +22,7 @@ DHT_EVENT_ANNOUNCE_DONE = 2
 DHT_EVENT_VALUES = 3
 DHT_EVENT_GET_DONE = 4 
 DHT_EVENT_PUT_DONE = 5
+DHT_EVENT_VALUE_ITEM = 6 
 
 class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
@@ -101,7 +102,7 @@ def call_listen(operation_type):
   return listen 
 
 
-def callback(event, id, data, data_len):
+def callback(event, id, data, data_len=0):
   output = ""
   if event == DHT_EVENT_SETUP_DONE:
     output = "=========================\nSetup done. ID: %s\n" % id 
@@ -121,9 +122,11 @@ def callback(event, id, data, data_len):
   elif event == DHT_EVENT_GET_DONE:
     output = "=========================\nGet done. ID: %s\n" % id 
     mycontext["get"] = True 
+  elif event == DHT_EVENT_VALUE_ITEM:
+    output = "=========================\nReceived value item. ID: %s\n" % id 
+    mycontext["get"] = True 
 
-
-  if data:
+  if data_len > 0:
     output += "Nodes (%d): \n" % data_len
     for d in data:
       if isinstance(d, tuple):
@@ -133,7 +136,11 @@ def callback(event, id, data, data_len):
 
     output += "-------------------------\n"
     log (output)
-
+  # else we got a data item from get 
+  else:
+    output += "Data: \n" + str(data) + "\n"
+    output += "-------------------------\n"
+    log (output)
 
 def dhtadvertise_lookup(my_id, target_id, callback, version=None):
 

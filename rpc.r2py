@@ -134,7 +134,7 @@ def put(self_id, value, ip, port, tid, token, opts=None):
 
   if opts:
     msg["a"]["k"] = opts["k"]
-    msg["a"]["seq"] = opts["seq"]
+    msg["a"]["seq"] = opts["seq"]   # needs be larger than existing seq! 
     msg["a"]["sig"] = opts["sig"]
 
     if opts.has_key("salt"):
@@ -167,4 +167,30 @@ def get(self_id, target_id, ip, port, tid):
     "q": "get"
   }
 
+  send(util.encoder(msg), ip, port)
+
+def send_get(self_id, ip, port, value_obj, nodes_str, tid, token):
+
+  msg = {
+    "r": {
+      "id": self_id,
+      "token": token,
+      "v": "",  # placeholder 
+      "nodes": nodes_str
+    },
+    "t": tid,
+    "y": "r"
+  }
+
+  if value_obj:
+    msg["r"]["v"] = value_obj["a"]["v"]
+    opts = msg["a"]
+    # additional mutable info 
+    if opts.has_key("k"):
+      msg["r"]["k"] = opts["k"]
+    if opts.has_key("seq"):
+      msg["r"]["seq"] = opts["seq"]
+    if opts.has_key("sig"):
+      msg["r"]["sig"] = opts["sig"]
+  
   send(util.encoder(msg), ip, port)
