@@ -3,21 +3,14 @@ util = dy_import_module("util.r2py")
 LOOKUP_CAPACITY = 14 
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
 DHT_MAX_LOOKUPS = 1024 
-DHT_EVENT_LOOKUPS_DONE = 3 
 BUF_SIZE = 512 #BYTES 
 LARGE_BUF_SIZE = 2048 
 
 
-def send(buf, target_ip, target_port):
-  # for debugging 
-  # target_ip = getmyip()
-  # target_port = 6881 
-  log ("Sending msg to %s : %d\n" % (target_ip, target_port))
-
+def send(buf, target_ip, target_port, my_port=63101):
+  # log ("Sending msg to %s : %d\n" % (target_ip, target_port))
   ip = getmyip()
-  port = 63101  # range: 63100, 63201
-
-  sendmessage(target_ip, target_port, buf, ip, port)
+  sendmessage(target_ip, target_port, buf, ip, my_port)
 
 
 def add_version(version):
@@ -35,7 +28,7 @@ def ping(self_id, ip, port, tid, tid_len, v=None):
 
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 def find_node(self_id, ip, port, tid, tid_len, target_id, v=None):
   buf = ("d1:ad2:id20:%s6:target20:%se1:q9:find_node1:t%d:%s" % 
@@ -43,7 +36,7 @@ def find_node(self_id, ip, port, tid, tid_len, target_id, v=None):
   buf += add_version(v)
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 # no ipv6 support here 
 def get_peers(self_id, ip, port, tid, tid_len, info_hash, v=None): 
@@ -52,7 +45,7 @@ def get_peers(self_id, ip, port, tid, tid_len, info_hash, v=None):
   buf += add_version(v)
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len, v=None):
   buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s" % 
@@ -60,7 +53,7 @@ def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token
   buf += add_version(v)
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 """
   REPLY METHODS 
@@ -70,16 +63,16 @@ def pong(self_id, ip, port, tid, tid_len, v=None):
   buf += add_version(v)
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 def send_closest_nodes(router, self_id, ip, port, tid, tid_len, target_id_str, 
                         token=None, token_len=0, peers_list=None, v=None):
   target_id_long = util.string_to_long(target_id_str)
   nodes_list = router.get_closest_good_nodes(target_id_long)
-  nodes_str = ''.join(nodes_list)
+  nodes_str = "".join(nodes_list)
   nodes_len = len(nodes_list) * 26 
 
-  return send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, v)
+  send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, v)
 
 def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, v):
   buf = "d1:rd2:id20:%s" % self_id 
@@ -102,14 +95,14 @@ def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peer
   buf += add_version(v)
   if len(buf) <= LARGE_BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 def peer_announced(self_id, ip, port, tid, tid_len, v=None):
   buf = "d1:rd2:id20:%se1:t%d:%s" % (self_id, tid_len, tid)
   buf += add_version(v)
   if len(buf) <= BUF_SIZE:
     log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
 
 def send_error(ip, port, tid, tid_len, error_code, error_msg, v=None):
   msg_len = len(error_msg)
@@ -118,51 +111,60 @@ def send_error(ip, port, tid, tid_len, error_code, error_msg, v=None):
   buf += add_version(v) + "e"
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
-    return send(buf, ip, port)
+    send(buf, ip, port)
+
 
 """
   PUT 
 """
 
-def put(self_id, value, ip, port, token, opts=None):
+def put(self_id, value, ip, port, tid, token, opts=None):
   # for key, val in opts.items():
   #   log (key, " ", val, "\n")
-  tid = util.make_tid("pt", util.make_lid())
   msg = {
-    'a': {
-      'id': self_id,
-      'token': token,
-      'v': value 
+    "a": {
+      "id": self_id,
+      "token": token,
+      "v": value 
     },
-    't': tid, 
-    'y': 'q',
-    'q': 'put'
+    "t": tid, 
+    "y": "q",
+    "q": "put"
   }
 
-  key = None 
   if opts:
-    msg['a']['k'] = opts['k']
-    msg['a']['seq'] = opts['seq']
+    msg["a"]["k"] = opts["k"]
+    msg["a"]["seq"] = opts["seq"]
+    msg["a"]["sig"] = opts["sig"]
 
-    if opts.has_key('salt'):
-      key = sha.sha_hash(opts['k'] + opts['salt'])
-      msg['a']['salt'] = opts['salt']
-    else:
-      key = sha.sha_hash(opts['k'])
+    if opts.has_key("salt"):
+      msg["a"]["salt"] = opts["salt"]
 
-    if opts.has_key('cas'):
-      msg['a']['cas'] = opts['cas']
-  else:
-    key = sha.sha_hash(value)
+    if opts.has_key("cas"):
+      msg["a"]["cas"] = opts["cas"]
 
   msg = util.encoder(msg)
   log (msg, "\n")
   send(msg, ip, port)
 
-  # return key 
-  return msg 
 
 def send_put(self_id, ip, port, tid):
   msg = util.encoder({"r":{"id": self_id}, "t": tid, "y": "r"})
   send(msg, ip, port)
 
+
+"""
+  GET 
+"""
+def get(self_id, target_id, ip, port, tid):
+  msg = {
+    "a": {
+      "id": self_id,
+      "target": target_id 
+    },
+    "t": tid,
+    "y": "q",
+    "q": "get"
+  }
+
+  send(util.encoder(msg), ip, port)

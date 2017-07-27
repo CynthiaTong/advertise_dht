@@ -36,24 +36,30 @@ class DHT:
 
       msg = util.parse_message(buf)
       # log (msg, "\n")
-      if msg == -1:
-        rpc.send_error(source_ip, source_port, tid, tid_len, 201, "Unknown query", self.version_id) 
+      # if msg is a string, it's an unknown query 
+      if isinstance(msg, str):
+        msg = util.decoder(msg)
+        if msg.has_key("t"):
+          rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
+        log ("Unknown query\n")
         return self.periodic(callback)
       # if put/get req 
       elif isinstance(msg, dict):
-        if msg['q'] == "put":
+        if msg.has_key("q") and msg["q"] == "put":
           log ("Put!\n")
-          self.verify_get(msg, source_ip, source_port)
-          sender_id = msg['a']['id']
-          self.storage.store_value(sender_id, msg)
-          return rpc.send_put(self.id, source_ip, source_port, msg['t'])
+          verified = self.verify_get(msg, source_ip, source_port)
+          if verified:
+            sender_id = msg["a"]["id"]
+            self.storage.store_value(sender_id, msg)
+            # log (self.storage.retrieve_value(sender_id), "\n")
+            return rpc.send_put(self.id, source_ip, source_port, msg["t"])
 
-        elif msg['q'] == "get":            
+        elif msg.has_key("q") and msg["q"] == "get":            
           log ("Get!\n")
 
         else: 
-          log ("Unknown query: %s\n" % msg['q'])
-          return rpc.send_error(source_ip, source_port, tid, tid_len, 201, "Unknown query", self.version_id) 
+          log ("Unknown query: %s\n" % msg["q"])
+          return rpc.send_error(source_ip, source_port, msg["t"], len(msg["q"]), 201, "Unknown query", self.version_id) 
 
       # msg is not get/put 
       else:
@@ -245,34 +251,37 @@ class DHT:
 
   def verify_get(self, msg, source_ip, source_port):
     try: 
-      value = msg['a']['v']
-      opts = msg['a']
-      tid = msg['t']
-      token = msg['a']['token']
-      sender_id = msg['a']['id']
+      value = msg["a"]["v"]
+      opts = msg["a"]
+      tid = msg["t"]
+      token = msg["a"]["token"]
+      sender_id = msg["a"]["id"]
       st = self.storage.retrieve_value(sender_id)
 
       if len(util.encoder(value)) >= 1000:
         rpc.send_error(source_ip, source_port, tid, len(tid), 205, "Message too big", self.version_id)
-
+        return False 
       if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
         rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Invalid token", self.version_id)
-
-      if opts.has_key('salt') and len(opts['salt']) > 64:
+        return False 
+      if opts.has_key("salt") and len(opts["salt"]) > 64:
         rpc.send_error(source_ip, source_port, tid, len(tid), 207, "Salt too big", self.version_id)
-      
+        return False 
       if st:
-        if opts.has_key('cas') and not opts['cas'] == st['seq']:
+        if opts.has_key("cas") and not opts["cas"] == st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", self.version_id)
-        if opts['seq'] <= st['seq']:
+          return False 
+        if opts["seq"] <= st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", self.version_id)
-
+          return False 
       # TODO: verify signiture - need ed25519 supercop/ref10 support 
   
     except:
       log ("Invalid put request!\n")
       rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Invalid arguments", self.version_id) 
-      
+      return False 
+
+    return True 
 
   def periodic(self, callback):
     log ("do periodic stuff.\n")
