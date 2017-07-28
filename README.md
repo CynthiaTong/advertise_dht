@@ -3,20 +3,22 @@
    - What would the keys be? 
    
       Right now they are randomly generated 20-byte strings; one other way is to sha-1 hash the key value provided by users
-      
-   - Have PUT and GET support both mutable and immutable data?  See [BEP44](http://www.bittorrent.org/beps/bep_0044.html)
    
 ## Problems
+
+   - Signature verification is done with ed25519, might be hard to implement the algorithm in Repy. 
    
-   
+      Existing projects:
+      
+      [https://github.com/substack/ed25519-supercop](https://github.com/substack/ed25519-supercop)
+      
+      [https://github.com/warner/python-ed25519](https://github.com/warner/python-ed25519)
+      
 ## To-dos 
 
    
-   - Look at KadNode's advertise and lookup methods, also Seattle's advertise library. 
-     
-     Add values methods to reannounce data. 
-   
-   - Include additional DHT functionalities such as nodes blacklist 
+   - Value reannounce and expire 
    
    - Add peerfile IO
    
+   - Unit Testing! 
