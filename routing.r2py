@@ -210,7 +210,7 @@ class RoutingTable:
         left_index -= 1 
         go_left = False 
 
-      if current_index < len(self.buckets):
+      if right_index < len(self.buckets):
         next_bucket = self.buckets[right_index]
         self.add_to_lookup(next_bucket, lookup)
         right_index += 1 
