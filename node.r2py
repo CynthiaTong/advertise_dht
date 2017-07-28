@@ -1,11 +1,10 @@
-dy_import_module_symbols("util.r2py")
+util = dy_import_module("util.r2py")
 
 class Node:
 
   def __init__(self, id, ip, port):
     self.id = str(id)
-    self.char_id = [ord(c) for c in self.id]
-    self.long_id = string_to_long(self.id)
+    self.long_id = util.string_to_long(self.id)
     self.ip = ip
     self.port = port
     self.replied = 0 
@@ -30,7 +29,7 @@ class Node:
             (self.replied and self.last_queried > getruntime() - 60*15)))
 
   def __repr__(self):
-    return repr([self.long_id, self.ip, self.port])
+    return repr([self.id, self.ip, self.port])
 
   def __str__(self):
-    return "%s %s:%s" % (self.long_id, self.ip, str(self.port))
+    return "%s %s:%s" % (self.id, self.ip, str(self.port))
