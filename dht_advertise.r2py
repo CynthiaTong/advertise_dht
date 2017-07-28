@@ -7,7 +7,7 @@ peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router
 
 my_ip = getmyip()
 my_port = 63101
-timeout = 300   # for testing, set it to be a large number 
+timeout = 200 
 mycontext["setup"] = False 
 mycontext["announce"] = False 
 mycontext["lookup"] = False 
@@ -86,9 +86,13 @@ def call_listen(operation_type):
       if operation_type == "setup":
         raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
       elif operation_type == "announce":
-        raise DHTAdvertiseError("DHT Error: Failed to perform announce_peer.")
+        raise DHTAdvertiseError("DHT Timeout: Failed to perform announce_peer.")
       elif operation_type == "lookup":
-        raise DHTAdvertiseError("DHT Error: Failed to perform get_peers.")
+        raise DHTAdvertiseError("DHT Timeout: Failed to perform get_peers.")
+      elif operation_type == "get":
+        raise DHTAdvertiseError("DHT Timeout: Failed to perform get.")
+      elif operation_type == "put":
+        raise DHTAdvertiseError("DHT Timeout: Failed to perform put.")
 
     if not operation_type == "setup":
       exitall()

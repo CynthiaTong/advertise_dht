@@ -70,7 +70,10 @@ class DHT:
             return rpc.send_get(self.id, source_ip, source_port, value_obj, nodes_str, tid, token)
            
         else: 
-          log ("Unknown query: %s\n" % msg["q"])
+          if msg.has_key("q"):
+            log ("Unknown query: %s\n" % msg["q"])
+          else:
+            log ("Unknown query.\n")
           return rpc.send_error(source_ip, source_port, msg["t"], len(msg["q"]), 201, "Unknown query", self.version_id) 
 
       # msg is not get/put 
@@ -106,7 +109,6 @@ class DHT:
             for lid in lids:
               if lid:
                 lookup = self.lookups.find_lookup_by_tid(lid) 
-                old_closest_node = lookup.get_nodes()[0]
 
                 if lookup.lookup_done: 
                   break 
@@ -118,9 +120,11 @@ class DHT:
                   log ("Unknown lookup!\n")
                   self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
                 else: # nodes_len normal & existing lookup - it's a proper reply 
+                  old_closest_node = lookup.get_nodes()[0]
                   self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+                  # extract nodes info from list 
                   i = 0 
-                  while i <= nodes_len - 26:
+                  while i <= len(nodes) - 26:
                     n = nodes[i:i+26]
                     # convert id, ip and port to host order and readable format 
                     n_id = ""
@@ -134,14 +138,14 @@ class DHT:
 
                     n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
                     i += 26 
-                    # log (n_ip, ": ", n_port, "\n")
+                    log (n_ip, ": ", n_port, "\n")
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
 
                     # insert into the corresponding lookup  
                     if lookup: 
-                      lookup.insert(n_id, n_ip, n_port, 0, token, token_len)
+                      lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
                   if lookup: 
                     # 1 means this node has replied 
@@ -187,23 +191,23 @@ class DHT:
                 return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
           elif util.tid_match(tid, "gt"):
-            res = util.decoder(buf)
-            log (res, "\n")
             try: 
+              res = util.decoder(buf)
+              # log (res, "\n")
+
               tid = res["t"]
               token = res["r"]["token"]
               target_id = res["r"]["id"]
               nodes = res["r"]["nodes"]
               values = res["r"]["v"]
               sig = ""
-              if res["a"].has_key("sig"):
-                sig = res["a"]["sig"]
+              if res["r"].has_key("sig"):
+                sig = res["r"]["sig"]
                 # verify signature, if invalid, return error 206 invalid sig
 
               lid = util.tid_match(tid, "gt")
-              lookup = self.lookups.find_lookup_by_tid(lid) 
-              old_closest_node = lookup.get_nodes()[0]
-
+              lookup = self.lookups.find_lookup_by_tid(lid)
+             
               # check nodes_len is normal 
               if not len(nodes) % 26 == 0:
                 log ("Unexpected length for node info!\n")
@@ -212,6 +216,8 @@ class DHT:
                 self.router.add_contact(sender_id, source_ip, source_port, 1)   # 1 for query (msg)
               else: # nodes_len normal & existing lookup - it's a proper reply 
                 if not lookup.lookup_done:
+                  old_closest_node = lookup.get_nodes()[0]
+
                   # return if we've got value item 
                   if len(values) > 0:
                     v = util.decoder(values)
@@ -219,20 +225,15 @@ class DHT:
 
                   log ("Got %d nodes for tid: %s\n" % (len(nodes)/26, tid))
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
+
+                  # extract nodes info from string 
                   i = 0 
                   while i <= len(nodes) - 26:
                     n = nodes[i:i+26]
                     # convert id, ip and port to host order and readable format 
-                    n_id = ""
-                    for x in n[:20]:
-                      n_id += chr(int(x))
-
-                    ip_strs = list()
-                    for x in n[20:24]:
-                      ip_strs.append(str(x))
-                    n_ip = ".".join(ip_strs)
-
-                    n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
+                    n_id = n[:20]
+                    n_ip = ".".join([str(ord(x)) for x in n[20:24]])
+                    n_port = util.string_to_long(n[24:])  # convert port bytes back to an integer
                     i += 26 
                     # log (n_ip, ": ", n_port, "\n")
                     if n_id == self.id:
@@ -260,9 +261,9 @@ class DHT:
                     else:
                       # query another alpha nodes that haven't replied 
                       self.lookups.lookup_step(lookup, callback, self.version_id)
-              
-            except:
-              log ("Faulty response to get.\n")                
+                
+            except Exception, e:
+              log ("Faulty response to get. Error: %s\n" % str(e))                
 
           elif util.tid_match(tid, "ap") or util.tid_match(tid, "pt"):  
             lids = (util.tid_match(tid, "ap"), util.tid_match(tid, "pt"))
@@ -388,7 +389,7 @@ class DHT:
       log ("Got get request with no target\n")
       rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Get with no target.", self.version_id)
       return False 
-    return True 
+    return True     
 
 
   def periodic(self, callback):
