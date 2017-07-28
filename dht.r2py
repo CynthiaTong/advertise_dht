@@ -221,7 +221,7 @@ class DHT:
                   # return if we've got value item 
                   if len(values) > 0:
                     v = util.decoder(values)
-                    return self.lookups.lookup_finished(lookup, callback, values=v)
+                    return self.lookups.lookup_finished(lookup, callback, values=v, res=res["r"])
 
                   log ("Got %d nodes for tid: %s\n" % (len(nodes)/26, tid))
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   

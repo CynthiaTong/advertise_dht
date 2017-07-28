@@ -106,7 +106,7 @@ def call_listen(operation_type):
   return listen 
 
 
-def callback(event, id, data, data_len=0):
+def callback(event, id, data, data_len=0, res=None):
   output = ""
   if event == DHT_EVENT_SETUP_DONE:
     output = "=========================\nSetup done. ID: %s\n" % id 
@@ -143,6 +143,7 @@ def callback(event, id, data, data_len=0):
   # else we got a data item from get 
   else:
     output += "Data: \n" + str(data) + "\n"
+    output += "Response: \n" + str(res), + "\n"
     output += "-------------------------\n"
     log (output)
 
@@ -230,6 +231,21 @@ def dhtadvertise_put(my_id, value, callback, **opts):
       mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
 
   return key  # return key for future lookup 
+
+def dhtadvertise_get(my_id, key, callback): 
+  if not (isinstance(key, str) and len(key) == 20):
+    raise ValueError("DHT get: key must be a 20-byte string.")
+
+  if not mycontext["setup"]:
+    dhtadvertise_setup(my_id)
+
+  while True:
+    if mycontext["setup"]:
+      mycontext["lock"].acquire(True)
+      listen = call_listen("get")
+      createthread(listen)
+      # 2 for get lookup
+      mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None)
 
 
 # if the values we're looking for exist in local storage 

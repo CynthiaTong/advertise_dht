@@ -133,27 +133,27 @@ class DHTLookup:
     send_count = 0       
     if lookup.port == 1 or lookup.port == 2:
         for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
+          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
             send_count += self.lookup_get(lookup, n)
           if send_count >= alpha:
             break
     else:
       for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 5:
+          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
             send_count += self.lookup_get_peers(lookup, version, n)
           if send_count >= alpha:
             break
 
     lookup.step_time = getruntime()
 
-  def lookup_finished(self, lookup, callback, values=None):
+  def lookup_finished(self, lookup, callback, values=None, res=None):
     lookup.done = 1 
     lookup.step_time = getruntime()
     if callback:
       event = -1 
       if values:
         if lookup.port == 1:
-          return callback(DHT_EVENT_VALUE_ITEM, lookup.id, values)
+          return callback(DHT_EVENT_VALUE_ITEM, lookup.id, values, 0, res)
         else:
           return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
       elif lookup.port > 2:
