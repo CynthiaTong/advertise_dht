@@ -77,12 +77,12 @@ def string_to_long(data):
 
 def htons(num):
   # if integer is 2-byte 
-  if (num.bit_length() + 7) // 8 == 2:
+  # if (num.bit_length() + 7) // 8 == 2:
   n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
   # log (n, "\n")
   return int_to_bytes(n)
-  raise Exception("htons: integer is not 2 bytes.\n")
-  return -1 
+  # raise Exception("htons: integer is not 2 bytes.\n")
+  # return -1 
 
 def int_to_bytes(long_int):
   """
@@ -131,13 +131,12 @@ def length_check(index, length, buf_len):
     return False 
   return True 
 
-
 """
   For now (k = 8)
   Max number of nodes to send: 8 
   Max number of peers to send: 8 
 """
-def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6): 
+def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6): 
   # change string.find to a more efficient method??
   buf_len = len(buf)
   sender_id = info_hash = target = token = ""
@@ -145,6 +144,28 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
   nodes = list()
   values = list()
   port = 0 
+
+  msg_type = -1 
+
+  if buf.find("1:y1:r") > -1:
+    msg_type = "REPLY"
+  elif buf.find("1:y1:e") > -1:
+    msg_type = "ERROR"    
+  elif buf.find("1:y1:q") == -1:
+    msg_type = -1 
+  elif buf.find("1:q4:ping") > -1:
+    msg_type = "PING"
+  elif buf.find("1:q9:find_node") > -1:
+    msg_type = "FIND_NODE"
+  elif buf.find("1:q9:get_peers") > -1:
+    msg_type = "GET_PEERS"
+  elif buf.find("1:q13:announce_peer") > -1:
+    msg_type = "ANNOUNCE_PEER"
+  else:
+    return decoder(buf)   # if it's a put/get message, return the decoded dictionary object 
+  
+  if msg_type == -1:    # if query is unknown, return the buf string 
+    return buf 
 
   # parse tid if it exists and adheres to our rule 
   p = buf.find("1:t")
@@ -156,7 +177,7 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
         tid += buf[k]
         k += 1 
       tid_len = len(tid)
-      log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
+      # log ("tid(tid_len): ", tid, " (", tid_len, ") \n")
     else:
       tid_len = 0 
   else:
@@ -166,7 +187,7 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
   if p > -1:
     if length_check(p+7, 20, buf_len):
       sender_id = buf[p+7:p+7+20]
-      log ("sender id: ", sender_id, "\n")
+      # log ("sender id: ", sender_id, "\n")
     else:
       sender_id = 0 
 
@@ -209,7 +230,7 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
     if (0 < l <= token_len and buf[q] == ":" and length_check(p+7, token_len, buf_len)):
       token = buf[q+1:q+1+l]
       token_len = l 
-      log ("token(token_len): ", token, " (", token_len, ") \n")
+      # log ("token(token_len): ", token, " (", token_len, ") \n")
     else: 
       token_len = 0 
   else:
@@ -230,7 +251,8 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
         nodes.append(ord(buf[k]))
         k += 1 
       nodes_len = len(nodes)
-      log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
+      # hex_nodes = [hex(n) for n in nodes]
+      # log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
     else:
       nodes_len = 0 
   else:
@@ -261,35 +283,13 @@ def parse_message(buf, tid_len=8, token_len=16, nodes_len=16*26, values_len=16*6
         break 
     if q < buf_len and buf[q] == "e":
       values_len = len(values)
-      log ("values(len): ", values, " (", values_len, ") \n")
+      # log ("values(len): ", values, " (", values_len, ") \n")
     else:
       log ("Unexpected end for values.\n")
   else:
     values_len = 0 
 
-  msg_type = -1 
-
-  if buf.find("1:y1:r") > -1:
-    msg_type = "REPLY"
-  elif buf.find("1:y1:e") > -1:
-    msg_type = "ERROR"    
-  elif buf.find("1:y1:q") == -1:
-    msg_type = -1 
-  elif buf.find("1:q4:ping") > -1:
-    msg_type = "PING"
-  elif buf.find("1:q9:find_node") > -1:
-    msg_type = "FIND_NODE"
-  elif buf.find("1:q9:get_peers") > -1:
-    msg_type = "GET_PEERS"
-  elif buf.find("1:q13:announce_peer") > -1:
-    msg_type = "ANNOUNCE_PEER"
-  
-  # log (msg_type, "\n")
-
-  if msg_type == -1:
-    return -1 
-  else:
-    return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
+  return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
             token, token_len, nodes, nodes_len, values, values_len)
 
 
@@ -302,7 +302,7 @@ def invalid_address(ip, port):
 
 
 """
-  The Bencode encoder and decoder functions are Inspired by: 
+  The Bencode encoder and decoder functions are inspired by: 
   Utku Demir's bencoder at https://github.com/utdemir/bencoder/
 """
 def encoder(obj):
@@ -344,7 +344,7 @@ def decoder(s):
         int_val += s[j]
         j += 1 
       if not s[j] == "e":
-        raise ValueError("Malformed input.")
+        log("Malformed input. j: %d\n" % j)
       return int(int_val), j
     elif s[i] == "l" or s[i] == "d":
       l = list()
@@ -375,10 +375,10 @@ def decoder(s):
       val = s[i: i + length]
       return val, i + length
     else:
-      raise ValueError("Malformed input: " + s[i:])
+      log("Malformed input: %s\n" % s[i:])
 
   return_val, i = _decode(0)
   if i < len(s):
-    raise ValueError("Malformed input.")
+    log ("Malformed input. i: %d/%d\n" %(i, len(s)))
 
   return return_val 
