@@ -194,3 +194,5 @@ def send_get(self_id, ip, port, value_obj, nodes_str, tid, token):
       msg["r"]["sig"] = opts["sig"]
   
   send(util.encoder(msg), ip, port)
+
+  return util.encoder(msg)   # just for debugging 

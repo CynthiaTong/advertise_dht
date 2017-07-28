@@ -1,4 +1,5 @@
 random = dy_import_module("random.r2py")
+node = dy_import_module("node.r2py")
 
 class Bucket:
 
@@ -18,7 +19,7 @@ class Bucket:
   # min: inclusive, max: exclusive 
   def in_range(self, *args):
     arg = args[0]
-    if isinstance(arg, Node):
+    if isinstance(arg, node.Node):
       return self.min <= arg.long_id < self.max
     elif isinstance(arg, (int, long)):
       return self.min <= arg <= self.max 
@@ -131,7 +132,7 @@ class Bucket:
     return self.nodes[n]
 
   def __str__(self):
-    output = ""
+    output = "Bucket last changed: %.2f\n" % self.last_changed
     for n in self.nodes:
       output += str(n) + "\n"
     return output
