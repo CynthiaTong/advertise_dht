@@ -33,7 +33,6 @@ class DHTAdvertiseError(Exception):
 def dhtadvertise_setup(my_id, my_version=None):
   try: 
     mycontext["dht"] = dht_module.DHT(my_id, my_version)
-    mycontext["lock"].acquire(True)
     listen = call_listen("setup")
     createthread(listen)
 
@@ -64,6 +63,7 @@ def periodic():
 
 def call_listen(operation_type):
   def listen():
+    mycontext["lock"].acquire(True)
     starttime = getruntime()
     udpresponsesocket = listenformessage(my_ip, my_port)
 
@@ -155,11 +155,10 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
  
   while True:
     if mycontext["setup"]:
-      mycontext["lock"].acquire(True)
       listen = call_listen("lookup")
       createthread(listen)
-      # sleep briefly in case there's a socket error 
-      sleep(0.5)
+      # sleep briefly for the socket to get ready 
+      sleep(0.1)
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
 
 
@@ -179,10 +178,10 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
 
   while True:
     if mycontext["setup"]:
-      mycontext["lock"].acquire(True)
       listen = call_listen("announce")
       createthread(listen)
-      sleep(0.5)
+      # sleep briefly 
+      sleep(0.1)
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
 
 
@@ -224,10 +223,9 @@ def dhtadvertise_put(my_id, value, callback, **opts):
 
   while True:
     if mycontext["setup"]:
-      mycontext["lock"].acquire(True)
       listen = call_listen("put")
       createthread(listen)
-      sleep(0.5)
+      sleep(0.1)
       # 2 for put lookup
       mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
 
@@ -242,10 +240,9 @@ def dhtadvertise_get(my_id, key, callback):
 
   while True:
     if mycontext["setup"]:
-      mycontext["lock"].acquire(True)
       listen = call_listen("get")
       createthread(listen)
-      sleep(0.5)
+      sleep(0.1)
       # 1 for get lookup
       mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None)
 
