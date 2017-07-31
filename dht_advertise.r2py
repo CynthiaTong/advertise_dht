@@ -49,7 +49,7 @@ def dhtadvertise_setup(my_id, my_version=None):
   except Exception, e:
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
-  sleep(0.5)
+  sleep(0.1)
 
   mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version)    # lookup my_id 
 
@@ -68,7 +68,7 @@ def call_listen(operation_type):
     udpresponsesocket = listenformessage(my_ip, my_port)
 
     while getruntime() < starttime + timeout:
-      if mycontext[operation_type]:
+      if operation_type == "setup" and mycontext[operation_type]:
         break 
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
@@ -104,27 +104,27 @@ def call_listen(operation_type):
 
 
 def callback(event, id, data, data_len=0, res=None):
-  output = ""
+  output = "=========================\nRuntime: %s\n" % getruntime()
   if event == DHT_EVENT_SETUP_DONE:
-    output = "=========================\nSetup done. ID: %s\n" % id 
+    output += "Setup done. ID: %s\n" % id 
     mycontext["setup"] = True 
   elif event == DHT_EVENT_ANNOUNCE_DONE:
-    output = "=========================\nAnnouncement done. ID: %s\n" % id 
+    output += "Announcement done. ID: %s\n" % id 
     mycontext["announce"] = True 
   elif event == DHT_EVENT_LOOKUP_DONE:
-    output = "=========================\nLookup done. ID: %s\n" % id 
+    output += "Lookup done. ID: %s\n" % id 
     mycontext["lookup"] = True
   elif event == DHT_EVENT_VALUES:
-    output = "=========================\nReceived values. ID: %s\n" % id 
+    output += "Received values. ID: %s\n" % id 
     mycontext["lookup"] = True 
   elif event == DHT_EVENT_PUT_DONE:
-    output = "=========================\nPut done. ID: %s\n" % id 
+    output += "Put done. ID: %s\n" % id 
     mycontext["put"] = True 
   elif event == DHT_EVENT_GET_DONE:
-    output = "=========================\nGet done. ID: %s\n" % id 
+    output += "Get done. ID: %s\n" % id 
     mycontext["get"] = True 
   elif event == DHT_EVENT_VALUE_ITEM:
-    output = "=========================\nReceived value item. ID: %s\n" % id 
+    output += "Received value item. ID: %s\n" % id 
     mycontext["get"] = True 
 
   if data_len > 0:

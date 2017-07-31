@@ -133,13 +133,13 @@ class DHTLookup:
     send_count = 0       
     if lookup.port == 1 or lookup.port == 2:
         for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
+          if n.pinged < 3 and not n.replied:
             send_count += self.lookup_get(lookup, n)
           if send_count >= alpha:
             break
     else:
       for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 15:
+          if n.pinged < 3 and not n.replied:
             send_count += self.lookup_get_peers(lookup, version, n)
           if send_count >= alpha:
             break
@@ -172,9 +172,9 @@ class DHTLookup:
 
 
   def lookup_get_peers(self, lookup, version, node):
-    if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
+    if not node or node.pinged >= 3:
       return 0 
-    log ("Sending get_peers.\n")
+    # log ("Sending get_peers.\n")
     tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
     rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id, version)
@@ -186,7 +186,7 @@ class DHTLookup:
     return 1 
 
   def lookup_get(self, lookup, node):
-    if not node or node.pinged >= 3 or node.last_req > getruntime() - 5:
+    if not node or node.pinged >= 3:
         return 0 
     log ("Sending get.\n")
     tid = util.make_tid("gt", lookup.tid)
