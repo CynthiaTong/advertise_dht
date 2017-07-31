@@ -110,8 +110,9 @@ class DHT:
               if lid:
                 lookup = self.lookups.find_lookup_by_tid(lid) 
 
-                if lookup.lookup_done: 
+                if lookup and lookup.lookup_done: 
                   break 
+
                 log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
                 # check nodes_len is normal 
                 if not nodes_len % 26 == 0:
@@ -138,7 +139,7 @@ class DHT:
 
                     n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
                     i += 26 
-                    log (n_ip, ": ", n_port, "\n")
+                    # log (n_ip, ": ", n_port, "\n")
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
@@ -367,7 +368,7 @@ class DHT:
         if opts.has_key("cas") and not opts["cas"] == st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", self.version_id)
           return False 
-        if opts["seq"] <= st["seq"]:
+        if opts["seq"] < st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", self.version_id)
           return False 
       # TODO: verify signiture - need ed25519 supercop/ref10 support 
