@@ -91,7 +91,12 @@ def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peer
       buf += "%d:%s%s" % (6, util.ip_as_bytes(p.ip), str(util.htons(p.port)))
       # log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
     buf += "e"
-  buf += "e1:t%d:%s" % (tid_len, tid)
+
+  if tid_match(tid, "fn"):
+    buf += "1:q9:find_node1:t%d:%s" % (tid_len, tid)
+  elif tid_match(tid, "gp"):
+    buf += "1:q9:get_peers1:t%d:%s" % (tid_len, tid)
+
   buf += add_version(v)
   if len(buf) <= LARGE_BUF_SIZE:
     # log (buf, "\n")
@@ -134,7 +139,12 @@ def put(self_id, value, ip, port, tid, token, opts=None):
 
   if opts:
     msg["a"]["k"] = opts["k"]
-    msg["a"]["seq"] = opts["seq"]   # needs be larger than existing seq! 
+    if opts.has_key("seq"):
+      msg["a"]["seq"] = opts["seq"]   # needs be larger than existing seq! 
+    else:
+      log ("no seq provided.\n")
+      # increment from existing record?? 
+
     msg["a"]["sig"] = opts["sig"]
 
     if opts.has_key("salt"):

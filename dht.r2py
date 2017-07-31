@@ -74,7 +74,7 @@ class DHT:
             log ("Unknown query: %s\n" % msg["q"])
           else:
             log ("Unknown query.\n")
-          return rpc.send_error(source_ip, source_port, msg["t"], len(msg["q"]), 201, "Unknown query", self.version_id) 
+          return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
 
       # msg is not get/put 
       else:
