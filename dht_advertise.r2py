@@ -181,6 +181,9 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
+      # call push_lookups  
+      p = mycontext["dht"].push_lookups(my_port, callback)
+      createthread(p)
       break 
 
 """
@@ -203,6 +206,10 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
+
+      # call push_lookups  
+      p = mycontext["dht"].push_lookups(my_port, callback)
+      createthread(p)
       break 
 
 """
