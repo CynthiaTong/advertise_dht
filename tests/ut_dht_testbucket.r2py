@@ -1,0 +1,65 @@
+"""
+  <Purpose> Test DHT Bucket class properties and methods 
+"""
+
+bucket = dy_import_module("bucket.r2py")
+node = dy_import_module("node.r2py")
+random = dy_import_module("random.r2py")
+
+b = bucket.Bucket(0, 2**3, 1)
+nodes = []
+for i in range(10):
+  nodes.append(node.Node(random.random_randombytes(3), "128.10.40.1" + str(i), i * 1000))
+
+def test_add_node():
+
+  added = b.add_node(nodes[0], 0)
+  assert added, "Error: cannot add node to bucket."
+  assert not b.last_changed == 0, "Error: bucket last_changed is not updated upon node addition."
+
+  added = b.add_node(nodes[1], 1)
+  assert added == False, "Error: added node and exceeded bucket size."
+
+def test_add_replacement():
+  b.add_replacement(nodes[2], 0)
+  b.add_replacement(nodes[3], 1)
+  b.add_replacement(nodes[2], 1)
+  assert b.replacements[0] == nodes[3], "Error: add_replacement does not move existing nodees to tail."
+
+def test_remove_node():
+  removed = b.remove_node(nodes[0])
+  assert removed, "Error: failed to remove node from bucket."
+  assert len(b.nodes) > 0, "Error: remove_node does not try adding from replacement."
+
+  removed = b.remove_node(nodes[9])
+  assert removed == False, "Error: remove_node returns True for non-existing node."
+
+def test_update_time_info():
+  assert nodes[0].last_replied > 0, "Error: update_time_info() does not update node.replied."
+  assert nodes[0].last_queried == 0, "Error: update_time_info() changes node.last_queried incorrectly."
+
+  assert not nodes[3].replied, "Error: update_time_info() changes node.replied incorrectly."
+  assert nodes[3].last_queried > 0, "Error: update_time_info() does not update node.last_queried."
+
+def test_split():
+  b1, b2 = b.split()
+  assert b1.min == 0, "Error: wrong min after bucket split."
+  assert b1.max == 4, "Error: wrong max after bucket split."
+  assert b2.min == 4, "Error: wrong min after bucket split."
+  assert b2.max == 8, "Error: wrong max after bucket split."
+
+def test_node_count():
+  b3 = bucket.Bucket(0, 2**3, 6)
+
+  for i in range(5, 10):
+    b3.add_node(nodes[i])
+  assert b3.node_count() == 5, "Error: wrong number returned by node_count()."
+
+
+if callfunc == "initialize":
+  test_add_node()
+  test_add_replacement()
+  test_remove_node()
+  test_update_time_info()
+  test_split()
+  test_node_count()
