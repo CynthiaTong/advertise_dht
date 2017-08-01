@@ -19,6 +19,13 @@ def add_version(version):
   else:
     return "1:y1:qe"
 
+def add_version_reply(version):
+  if version:
+    return "1:v4:" + version + "1:y1:re"
+  else:
+    return "1:y1:re"
+
+
 """
   QUERY METHODS 
 """
@@ -60,7 +67,7 @@ def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token
 """
 def pong(self_id, ip, port, tid, tid_len, my_port=63101, v=None):
   buf = "d1:rd2:id20:%se1:t%d:%s" % (self_id, tid_len, tid)
-  buf += add_version(v)
+  buf += add_version_reply(v)
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
     send(buf, ip, port, my_port)
@@ -97,14 +104,14 @@ def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peer
   elif util.tid_match(tid, "gp"):
     buf += "1:q9:get_peers1:t%d:%s" % (tid_len, tid)
 
-  buf += add_version(v)
+  buf += add_version_reply(v)
   if len(buf) <= LARGE_BUF_SIZE:
     # log (buf, "\n")
     send(buf, ip, port, my_port)
 
 def peer_announced(self_id, ip, port, tid, tid_len, my_port=63101, v=None):
   buf = "d1:rd2:id20:%se1:t%d:%s" % (self_id, tid_len, tid)
-  buf += add_version(v)
+  buf += add_version_reply(v)
   if len(buf) <= BUF_SIZE:
     log (buf, "\n")
     send(buf, ip, port, my_port)
@@ -113,7 +120,7 @@ def send_error(ip, port, tid, tid_len, error_code, error_msg, my_port=63101, v=N
   msg_len = len(error_msg)
   buf = "d1:eli%de%d:%s" % (error_code, msg_len, error_msg)
   buf += "e1:t%d:%s" % (tid_len, tid)
-  buf += add_version(v) + "e"
+  buf += add_version_reply(v) + "e"
   if len(buf) <= BUF_SIZE:
     # log (buf, "\n")
     send(buf, ip, port, my_port)
