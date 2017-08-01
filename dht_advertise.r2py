@@ -8,7 +8,8 @@ peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router
 
 my_ip = getmyip()
 my_port = 63101
-timeout = 200 
+setup_port = 63102
+timeout = 600 
 mycontext["setup"] = False 
 mycontext["announce"] = False 
 mycontext["lookup"] = False 
@@ -34,15 +35,15 @@ class DHTAdvertiseError(Exception):
 def dhtadvertise_setup(my_id, my_version=None):
   try: 
     mycontext["dht"] = dht_module.DHT(my_id, my_version)
-    listen = call_listen("setup")
-    createthread(listen)
+    # listen = call_listen("setup")
+    createthread(setup_listen)
 
     for p in peers:
       ip = gethostbyname(p[0])
       port = p[1]
       # ping_node is the "hard" way to bootstrap - it actually sends messages to the pinged node 
       # if we don"t have anything in the peersfile yet, use this  
-      mycontext["dht"].ping_node(ip, port)
+      mycontext["dht"].ping_node(ip, port, setup_port)
 
       sleep(0.05)
 
@@ -51,16 +52,43 @@ def dhtadvertise_setup(my_id, my_version=None):
 
   sleep(0.1)
 
-  mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version)    # lookup my_id 
+  mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version, setup_port)    # lookup my_id 
 
   # call periodic 
-  createthread(periodic)
+  p = periodic(setup_port)
+  createthread(p)
 
 
-def periodic():
-  while True:
-    if mycontext["dht"].to_sleep <= getruntime():
-      mycontext["dht"].periodic(callback)
+def periodic(port):
+  def perio():
+    while True:
+      if mycontext["dht"].to_sleep <= getruntime():
+        mycontext["dht"].periodic(port, callback)
+  return perio 
+
+def setup_listen():
+
+  starttime = getruntime()
+  udpresponsesocket = listenformessage(my_ip, setup_port)
+
+  while getruntime() < starttime + timeout:
+    try:  
+      remoteip, remoteport, message = udpresponsesocket.getmessage()
+      mycontext["dht"].new_message(message, remoteip, remoteport, setup_port, callback)
+
+    except SocketWouldBlockError:
+      sleep(0.1)
+    except SocketClosedLocal:
+      break
+
+  udpresponsesocket.close()
+
+  # save to peerfile 
+
+  if not mycontext["setup"]:
+    raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node setup.")
+
+  exitall()
 
 def call_listen(operation_type):
   def listen():
@@ -73,7 +101,7 @@ def call_listen(operation_type):
       #   break 
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
-        mycontext["dht"].new_message(message, remoteip, remoteport, callback)
+        mycontext["dht"].new_message(message, remoteip, remoteport, callback=callback)
 
       except SocketWouldBlockError:
         sleep(0.1)
@@ -83,13 +111,8 @@ def call_listen(operation_type):
     udpresponsesocket.close()
     mycontext["lock"].release()
 
-    # save to peerfile 
-
-
     if not mycontext[operation_type]:
-      if operation_type == "setup":
-        raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node Lookup.")
-      elif operation_type == "announce":
+      if operation_type == "announce":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform announce_peer.")
       elif operation_type == "lookup":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform get_peers.")
@@ -97,9 +120,6 @@ def call_listen(operation_type):
         raise DHTAdvertiseError("DHT Timeout: Failed to perform get.")
       elif operation_type == "put":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform put.")
-
-    if not operation_type == "setup":
-      exitall()
 
   return listen 
 
@@ -145,6 +165,7 @@ def callback(event, id, data, data_len=0, res=None):
     output += "-------------------------\n"
     log (output)
 
+
 def dhtadvertise_lookup(my_id, target_id, callback, version=None):
 
   target_id = str(target_id)
@@ -158,8 +179,7 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
     if mycontext["setup"]:
       listen = call_listen("lookup")
       createthread(listen)
-      # sleep briefly for the socket to get ready 
-      sleep(0.1)
+
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
       break 
 
@@ -181,8 +201,7 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
     if mycontext["setup"]:
       listen = call_listen("announce")
       createthread(listen)
-      # sleep briefly 
-      sleep(0.1)
+
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
       break 
 
@@ -226,7 +245,7 @@ def dhtadvertise_put(my_id, value, callback, **opts):
     if mycontext["setup"]:
       listen = call_listen("put")
       createthread(listen)
-      sleep(0.1)
+
       # 2 for put lookup
       mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
       break 
@@ -244,7 +263,7 @@ def dhtadvertise_get(my_id, key, callback):
     if mycontext["setup"]:
       listen = call_listen("get")
       createthread(listen)
-      sleep(0.1)
+
       # 1 for get lookup
       mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None)
       break 

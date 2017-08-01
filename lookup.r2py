@@ -33,7 +33,7 @@ class DHTLookup:
     - > 2 for ANNOUNCE_PEER  
   
   """
-  def dht_lookup(self, string_id, port, callback, version, value=None, opts=None):
+  def dht_lookup(self, string_id, port, callback, version, my_port=63101, value=None, opts=None):
     # refresh 
     self.stable_results = 0 
     new_lookup = True 
@@ -56,8 +56,8 @@ class DHTLookup:
         # self.lookup_step(l, callback, version)
         if not l.lookup_done: 
           for n in l.get_good_nodes():
-            log ("get_peers to %s %d\n" %(n.ip, n.port))
-            self.lookup_get_peers(l, version, n)
+            # log ("get_peers to %s %d\n" %(n.ip, n.port))
+            self.lookup_get_peers(l, version, n, my_port)
         break 
 
     if new_lookup:
@@ -78,12 +78,12 @@ class DHTLookup:
       newest = self.router.get_lookup_nodes(newest, target_id)
       # newest.port = port 
       # log ("new ")
-      self.lookup_step(newest, callback, version)
+      self.lookup_step(newest, callback, version, my_port)
       # log (newest.get_all_ids(), "\n")
     # update lookup_time 
     self.lookup_time = getruntime()
 
-  def lookup_step(self, lookup, callback, version, alpha=3, finished=0):
+  def lookup_step(self, lookup, callback, version, my_port=63101, alpha=3, finished=0):
     # log ("ALPHA: ", alpha, "\n")
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
@@ -106,11 +106,11 @@ class DHTLookup:
             if lookup.port > 2:
               log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("ap", lookup.tid)
-              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, version)
+              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, my_port, version)
             else: # lookup is for put 
               log ("Sending put to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("pt", lookup.tid)
-              rpc.put(self.id, lookup.value, n.ip, n.port, tid, n.token, lookup.opts)
+              rpc.put(self.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
 
             n.pinged += 1 
             n.last_req = getruntime()
@@ -137,14 +137,13 @@ class DHTLookup:
     if lookup.port == 1 or lookup.port == 2:
         for n in lookup.get_nodes():
           if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-            send_count += self.lookup_get(lookup, n)
+            send_count += self.lookup_get(lookup, n, my_port)
           if send_count >= alpha:
             break
     else:
       for n in lookup.get_nodes():
           if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-            log ("Sending get_peers to %s %d\n" %(n.ip, n.port))
-            send_count += self.lookup_get_peers(lookup, version, n)
+            send_count += self.lookup_get_peers(lookup, version, n, my_port)
           if send_count >= alpha:
             break
 
@@ -175,13 +174,13 @@ class DHTLookup:
       return callback(event, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))  
 
 
-  def lookup_get_peers(self, lookup, version, node):
+  def lookup_get_peers(self, lookup, version, node, my_port):
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
       return 0 
     # log ("Sending get_peers to %s %d\n" %(node.ip, node.port))
     tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
-    rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id, version)
+    rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id, my_port, version)
     node.pinged += 1 
     node.last_req = getruntime()
     router_node = self.router.find_node(node.long_id)
@@ -189,12 +188,12 @@ class DHTLookup:
       self.router.pinged(router_node)
     return 1 
 
-  def lookup_get(self, lookup, node):
+  def lookup_get(self, lookup, node, my_port):
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
         return 0 
     log ("Sending get.\n")
     tid = util.make_tid("gt", lookup.tid)
-    rpc.get(self.id, lookup.id, node.ip, node.port, tid)
+    rpc.get(self.id, lookup.id, node.ip, node.port, tid, my_port)
     node.pinged += 1 
     node.last_req = getruntime()
     router_node = self.router.find_node(node.long_id)
