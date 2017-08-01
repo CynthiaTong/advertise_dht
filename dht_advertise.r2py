@@ -4,6 +4,7 @@ util = dy_import_module("util.r2py")
 sha = dy_import_module("sha.r2py")
 
 peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
+# peers = [("192.171.20.109", 63101)]
 
 my_ip = getmyip()
 my_port = 63101
@@ -68,8 +69,8 @@ def call_listen(operation_type):
     udpresponsesocket = listenformessage(my_ip, my_port)
 
     while getruntime() < starttime + timeout:
-      if operation_type == "setup" and mycontext[operation_type]:
-        break 
+      # if operation_type == "setup" and mycontext[operation_type]:
+      #   break 
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
         mycontext["dht"].new_message(message, remoteip, remoteport, callback)
@@ -140,7 +141,7 @@ def callback(event, id, data, data_len=0, res=None):
   # else we got a data item from get 
   else:
     output += "Data: \n" + str(data) + "\n"
-    output += "Response: \n" + str(res), + "\n"
+    output += "Response: \n" + str(res) + "\n"
     output += "-------------------------\n"
     log (output)
 
@@ -160,7 +161,7 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
       # sleep briefly for the socket to get ready 
       sleep(0.1)
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
-
+      break 
 
 """
   original BitTorrent method: 
@@ -183,7 +184,7 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
       # sleep briefly 
       sleep(0.1)
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
-
+      break 
 
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
@@ -228,6 +229,7 @@ def dhtadvertise_put(my_id, value, callback, **opts):
       sleep(0.1)
       # 2 for put lookup
       mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
+      break 
 
   return key  # return key for future lookup 
 
@@ -245,7 +247,7 @@ def dhtadvertise_get(my_id, key, callback):
       sleep(0.1)
       # 1 for get lookup
       mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None)
-
+      break 
 
 # if the values we're looking for exist in local storage 
 def dhtadvertise_local_lookup(id):

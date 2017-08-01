@@ -38,10 +38,13 @@ class DHT:
       # log (msg, "\n")
       # if msg is a string, it's an unknown query 
       if isinstance(msg, str):
-        msg = util.decoder(msg)
-        if msg.has_key("t"):
-          rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
-        log ("Unknown query\n")
+        try: 
+          msg = util.decoder(msg)
+          if msg.has_key("t"):
+            rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
+          log ("Unknown query\n")
+        except: 
+          log ("Cannot process unknown query.\n")
         return self.periodic(callback)
       # if put/get req 
       elif isinstance(msg, dict):
@@ -74,7 +77,8 @@ class DHT:
             log ("Unknown query: %s\n" % msg["q"])
           else:
             log ("Unknown query.\n")
-          return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
+          if msg.has_key("t"):
+            return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", self.version_id) 
 
       # msg is not get/put 
       else:
@@ -109,10 +113,7 @@ class DHT:
             for lid in lids:
               if lid:
                 lookup = self.lookups.find_lookup_by_tid(lid) 
-
-                if lookup and lookup.lookup_done: 
-                  break 
-
+             
                 # log ("Got %d nodes for tid: %s\n" % (nodes_len/26, tid))
                 # check nodes_len is normal 
                 if not nodes_len % 26 == 0:
@@ -121,35 +122,36 @@ class DHT:
                   log ("Unknown lookup!\n")
                   self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
                 else: # nodes_len normal & existing lookup - it's a proper reply 
-                  old_closest_node = lookup.get_nodes()[0]
-                  self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-                  # extract nodes info from list 
-                  i = 0 
-                  while i <= len(nodes) - 26:
-                    n = nodes[i:i+26]
-                    # convert id, ip and port to host order and readable format 
-                    n_id = ""
-                    for x in n[:20]:
-                      n_id += chr(int(x))
+                  if not lookup.lookup_done:
+                    old_closest_node = lookup.get_nodes()[0]
+                    self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+                    # extract nodes info from list 
+                    i = 0 
+                    while i <= len(nodes) - 26:
+                      n = nodes[i:i+26]
+                      # convert id, ip and port to host order and readable format 
+                      n_id = ""
+                      for x in n[:20]:
+                        n_id += chr(int(x))
 
-                    ip_strs = list()
-                    for x in n[20:24]:
-                      ip_strs.append(str(x))
-                    n_ip = ".".join(ip_strs)
+                      ip_strs = list()
+                      for x in n[20:24]:
+                        ip_strs.append(str(x))
+                      n_ip = ".".join(ip_strs)
 
-                    n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
-                    i += 26 
-                    # log (n_ip, ": ", n_port, "\n")
-                    if n_id == self.id:
-                      continue;
-                    self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
+                      n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
+                      i += 26 
+                      # log (n_ip, ": ", n_port, "\n")
+                      if n_id == self.id:
+                        continue;
+                      self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
 
-                    # insert into the corresponding lookup  
-                    if lookup: 
+                      # insert into the corresponding lookup  
+                      # if lookup: 
                       lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
-                  if lookup: 
-                    # 1 means this node has replied 
+                    # if lookup: 
+                      # 1 means this node has replied 
                     lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                     # if we failed to get a new closest node, increment stable_results
                     if old_closest_node == lookup.get_nodes()[0]: 
@@ -187,9 +189,10 @@ class DHT:
                 filtered_values.append((v_ip, v_port))
                 # log (v_ip, ": ", v_port, "\n")
 
-              # since we've got values, stop the lookup and return callback 
-              if callback and not lookup.done:
-                return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
+              # since we've got values, stop the lookup and return callback
+              if lookup and not lookup.done:  
+                if callback and lookup.port < 2:
+                  return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
           elif util.tid_match(tid, "gt"):
             try: 
@@ -270,28 +273,27 @@ class DHT:
             lids = (util.tid_match(tid, "ap"), util.tid_match(tid, "pt"))
             for lid in lids:
               if lid: 
+                # log ("Got reply to announce_peer/put from: %s %d\n" %(source_ip, source_port))
                 lookup = self.lookups.find_lookup_by_tid(lid) 
                 if lookup == None:
                   log ("Unknown announce_peer/put lookup!\n")
                   self.router.add_contact(sender_id, source_ip, source_port, 1)   # 1 for query (msg)
                 else:
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply 
-                  acked = 0 
                   for n in lookup.get_good_nodes():
                     if n.ip == source_ip and n.port == source_port:
-                      # the node has acked already 
-                      acked = n.acked
-
+                      if n.acked == 0: 
+                        log(lookup)
+                        log ("Got new reply to announce_peer/put from: %s %d\n" %(source_ip, source_port))
+                        self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
+                      
                       n.last_req = 0 
                       n.replied = 1 
                       n.last_replied = getruntime()
                       n.acked = 1 
                       n.pinged = 0 
-                      break 
 
-                  if not acked: 
-                    log ("Got new reply to announce_peer/put from: %s %d\n" %(source_ip, source_port))
-                    self.lookups.lookup_step(lookup, callback, self.version_id, finished=1)
+                      break 
                 break 
 
           else:
@@ -321,7 +323,7 @@ class DHT:
             token = util.make_token(source_ip, self.secret_package[1])
             if peers_list:
               log ("Sending found peers.\n")
-              return rpc.send_closest_nodes(self.id, source_ip, source_port, tid, tid_len, info_hash, 
+              return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, 
                                           token, TOKEN_SIZE, peers_list, self.version_id)
             else:
               log ("Sending nodes for get_peers.\n")
@@ -419,7 +421,7 @@ class DHT:
       self.lookups.lookup_time = 0 
       for l in lks:
         if not l.done:
-          l_time = l.step_time + 5 + random.random_int_below(5)    # next lookup in 5 - 10 seconds 
+          l_time = l.step_time + 5 + random.random_int_below(5)    # next lookup in 5 - 10 seconds  
           if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
             self.lookups.lookup_time = l_time
             # log ("L time...%.2f\n" % self.lookups.lookup_time)

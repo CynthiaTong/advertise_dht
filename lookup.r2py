@@ -54,8 +54,10 @@ class DHTLookup:
         l.value = value 
         l.opts = opts 
         # self.lookup_step(l, callback, version)
-        for n in l.get_good_nodes():
-          self.lookup_get_peers(l, version, n)
+        if not l.lookup_done: 
+          for n in l.get_good_nodes():
+            log ("get_peers to %s %d\n" %(n.ip, n.port))
+            self.lookup_get_peers(l, version, n)
         break 
 
     if new_lookup:
@@ -89,7 +91,7 @@ class DHTLookup:
     if all_replied or finished:
       lookup.lookup_done = 1 
       # finished for pure lookup 
-      log ("Lookup Port: %d\n" % lookup.port)
+      # log ("Lookup Port: %d\n" % lookup.port)
       # if lookup is for get_peer or get 
       if lookup.port < 2:
         self.lookup_finished(lookup, callback)
@@ -116,13 +118,14 @@ class DHTLookup:
             router_node = self.router.find_node(n.long_id)
             if router_node:
               self.router.pinged(router_node)
-
+        log ("all_acked num: %d \n" % all_acked)
         if all_acked >= 8:
           log ("All acked - thus finished! \n")
           self.lookup_finished(lookup, callback) 
+
       lookup.step_time = getruntime()
       return 
-
+    
     # if not all replied 
     # ignore too frequent lookups 
     if lookup.step_time > getruntime() - 0.1:
@@ -133,13 +136,14 @@ class DHTLookup:
     send_count = 0       
     if lookup.port == 1 or lookup.port == 2:
         for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 1:
+          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
             send_count += self.lookup_get(lookup, n)
           if send_count >= alpha:
             break
     else:
       for n in lookup.get_nodes():
-          if n.pinged < 3 and not n.replied and n.last_req < getruntime() - 1:
+          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
+            log ("Sending get_peers to %s %d\n" %(n.ip, n.port))
             send_count += self.lookup_get_peers(lookup, version, n)
           if send_count >= alpha:
             break
@@ -174,7 +178,7 @@ class DHTLookup:
   def lookup_get_peers(self, lookup, version, node):
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
       return 0 
-    # log ("Sending get_peers.\n")
+    # log ("Sending get_peers to %s %d\n" %(node.ip, node.port))
     tid = util.make_tid("gp", lookup.tid)
     # send get_peers 
     rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id, version)
@@ -186,7 +190,7 @@ class DHTLookup:
     return 1 
 
   def lookup_get(self, lookup, node):
-    if not node or node.pinged >= 3:
+    if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
         return 0 
     log ("Sending get.\n")
     tid = util.make_tid("gt", lookup.tid)
@@ -303,21 +307,21 @@ class Lookup:
     return len(self.list) >= self.capacity
 
   def __str__(self):
-    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
-              (self.target_id, self.tid, self.port, self.step_time, self.done))
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" % 
+              (self.target_id, self.tid, self.port, self.step_time, self.done, self.lookup_done))
     output += "lookup nodes (%d): \n" % len(self.list)
     for l in self.list:
       output += l.ip + "\t" + str(l.replied) + "\n"
     return output 
 
   def print_good_nodes(self):
-    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d\n" % 
-            (self.target_id, self.tid, self.port, self.step_time, self.done))
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" % 
+            (self.target_id, self.tid, self.port, self.step_time, self.done, self.lookup_done))
     output += "good lookup nodes: \n"
     for l in self.list:
       if l.replied:
         output += l.ip + "\t" + str(l.replied) + "\n"
-    return output 
+    log(output)
 
   def get_good_nodes(self):
     l_list = list()
