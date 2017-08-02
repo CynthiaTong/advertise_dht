@@ -55,10 +55,9 @@ class Bucket:
         duplicates = n  
         break   
     if duplicates:
-      # move existing node to tail
+      # remove existing node, and add to tail 
       self.nodes.remove(duplicates)
-      self.nodes.append(duplicates)
-      node = duplicates
+      self.nodes.append(node)
     elif len(self.nodes) < self.ksize:
       self.nodes.append(node)
     # New node and bucket full 
@@ -77,15 +76,11 @@ class Bucket:
     
   """
   def add_replacement(self, node, message_type):
-    # if the node exists in replacements, move it to tail (top)
-    duplicates = None 
+    # if the node exists in replacements, remove it and add new node to tail 
     for n in self.replacements:
       if n.ip == node.ip and n.port == node.port:
-        duplicates = n  
+        self.replacements.remove(n)
         break   
-    if duplicates:
-      self.replacements.remove(duplicates)
-      node = duplicates
     self.replacements.append(node)
     self.update_time_info(node, message_type)
   
