@@ -40,7 +40,7 @@ class DHT:
           msg = util.decoder(msg)
           if msg.has_key("t"):
             rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", my_port, self.version_id) 
-          log ("Unknown query\n")
+          log ("Unknown query: %s\n" % msg)
         except: 
           log ("Cannot process unknown query.\n")
         return self.periodic(my_port, callback)
@@ -74,7 +74,7 @@ class DHT:
           if msg.has_key("q"):
             log ("Unknown query: %s\n" % msg["q"])
           else:
-            log ("Unknown query.\n")
+            log ("Unknown query.\n", msg)
           if msg.has_key("t"):
             return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", my_port, self.version_id) 
 
@@ -101,7 +101,7 @@ class DHT:
             return self.periodic(my_port, callback)
 
           if util.tid_match(tid, "pn"):
-            log ("Pong!\n")
+            # log ("Pong!\n")
             self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply
 
           elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
@@ -405,7 +405,24 @@ class DHT:
       self.storage.expire_storage()
       self.lookups.expire_lookups()
 
-    # self.push_lookups(my_port, callback)
+    if 0 < self.lookups.lookup_time <= getruntime():
+      lks = self.lookups.get_lookups()
+      # execute the lookups 
+      if len(lks) > 0:
+        for l in lks:
+          if not l.done and l.step_time <= getruntime() - 2:
+            if l.lookup_done: 
+              self.lookups.lookup_step(l, callback, self.version_id, my_port, finished=1)
+            else:
+              self.lookups.lookup_step(l, callback, self.version_id, my_port)
+
+      # increase lookup_time for next rounds of steps 
+      self.lookups.lookup_time = 0 
+      for l in lks:
+        if not l.done:
+          l_time = l.step_time + 2 + random.random_int_below(5)   # next lookup in 2 - 7 seconds  
+          if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
+            self.lookups.lookup_time = l_time
 
     log ("Run time...%.2f\n" % getruntime())
 
@@ -420,40 +437,17 @@ class DHT:
       self.to_sleep = self.refresh_buckets_time
     else:
       self.to_sleep = getruntime()
-    # log ("Refresh time...%.2f\n" % self.refresh_buckets_time)
+    log ("Refresh time...%.2f\n" % self.refresh_buckets_time)
 
-    # if self.lookups.lookup_time > 0 and self.lookups.lookup_time < self.to_sleep:
-    #   if self.lookups.lookup_time > getruntime():
-    #     self.to_sleep = self.lookups.lookup_time
-    #   else:
-    #     self.to_sleep = getruntime() 
-    # log ("Lookup time...%.2f\n" % self.lookups.lookup_time)
+    if self.lookups.lookup_time > 0 and self.lookups.lookup_time < self.to_sleep:
+      if self.lookups.lookup_time > getruntime():
+        self.to_sleep = self.lookups.lookup_time
+      else:
+        self.to_sleep = getruntime() 
+    log ("Lookup time...%.2f\n" % self.lookups.lookup_time)
     log ("Sleep until...%.2f\n" % self.to_sleep)
     return True
 
-
-  def push_lookups(self, my_port, callback):
-    def push():
-      if 0 < self.lookups.lookup_time <= getruntime():
-        lks = self.lookups.get_lookups()
-        # execute the lookups 
-        if len(lks) > 0:
-          for l in lks:
-            if not l.done and l.step_time <= getruntime() - 2:
-              if l.lookup_done: 
-                self.lookups.lookup_step(l, callback, self.version_id, my_port, finished=1)
-              else:
-                self.lookups.lookup_step(l, callback, self.version_id, my_port)
-
-      # increase lookup_time for next rounds of steps 
-      self.lookups.lookup_time = 0 
-      for l in lks:
-        if not l.done:
-          l_time = l.step_time + random.random_int_below(2)   # next lookup in less than 2 seconds  
-          if self.lookups.lookup_time == 0 or self.lookups.lookup_time > l_time:
-            self.lookups.lookup_time = l_time
-
-    return push 
 
   def ping_node(self, ip, port, my_port=63101):
     tid = util.make_tid("pn", util.make_lid())
