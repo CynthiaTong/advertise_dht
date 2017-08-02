@@ -2,9 +2,11 @@ dht_module = dy_import_module("dht.r2py")
 rpc = dy_import_module("rpc.r2py")
 util = dy_import_module("util.r2py")
 sha = dy_import_module("sha.r2py")
+peerfile = dy_import_module("peerfile.r2py")
 
-peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
-# peers = [("192.171.20.109", 63101)]
+# peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
+# peers = [("192.171.20.108", 63102), ("router.utorrent.com", 6881)]
+peers = peerfile.import_peers("peers.txt")
 
 my_ip = getmyip()
 my_port = 63101
@@ -40,12 +42,15 @@ def dhtadvertise_setup(my_id, my_version=None):
 
     for p in peers:
       ip = gethostbyname(p[0])
-      port = p[1]
+      port = int(p[1])
+      _id = p[2]
       # ping_node is the "hard" way to bootstrap - it actually sends messages to the pinged node 
       # if we don"t have anything in the peersfile yet, use this  
-      mycontext["dht"].ping_node(ip, port, setup_port)
+      # mycontext["dht"].ping_node(ip, port, setup_port)
 
-      sleep(0.05)
+      # Otherwise, we can add nodes to the routing table directly from the peerfile 
+      # Beware this can introduce "bad nodes", which will eventually be removed by the routing table 
+      mycontext["dht"].router.add_contact(_id, ip, port, 2)   # 2 for general adding (not reply or query)
 
   except Exception, e:
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
@@ -84,6 +89,10 @@ def setup_listen():
   udpresponsesocket.close()
 
   # save to peerfile 
+  contacts = mycontext["dht"].router.get_all_nodes()
+  peers = [ n.ip + "," + str(n.port) + "," + n.id + "\n" for n in contacts]
+  num = peerfile.export_peers(peers, "peers.txt")
+  log ("Saved %d peers to peerfile.\n" % num)
 
   if not mycontext["setup"]:
     raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node setup.")
@@ -181,9 +190,6 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
-      # call push_lookups  
-      p = mycontext["dht"].push_lookups(my_port, callback)
-      createthread(p)
       break 
 
 """
@@ -206,10 +212,6 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
-
-      # call push_lookups  
-      p = mycontext["dht"].push_lookups(my_port, callback)
-      createthread(p)
       break 
 
 """

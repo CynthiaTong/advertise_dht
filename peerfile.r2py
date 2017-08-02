@@ -1,0 +1,42 @@
+MAXPEERS = 200
+# export_peers_time = getruntime() + 60 * 5
+
+def import_peers(filename):
+  peerfile = openfile(filename, False)
+  if not peerfile:
+    raise ValueError("Cannot open file: %s\n" % filename)
+  content = peerfile.readat(None, 0)
+  lines = content.split("\n")
+  peers = list()
+  for l in lines:
+    items = l.split(",")
+    if len(items) == 3:
+      peers.append(items)
+
+  peerfile.close()
+  return peers 
+
+def export_peers(peerslist, filename):
+  if len(peerslist) == 0:
+    log ("No peers to export.\n")
+    return 
+
+  # might not need this, if we're only exporting on shutdown 
+  # if getruntime() < export_peers_time:
+  #   log ("Haven't reached export time. No peers exported.\n")
+
+  peerfile = openfile(filename, True)
+  if not peerfile:
+    raise ValueError("Cannot open file: %s\n" % filename)
+
+  offset = 0 
+  numpeers = 0 
+  for l in peerslist:
+    peerfile.writeat(l, offset)
+    offset += len(l)
+    numpeers += 1 
+    if numpeers >= MAXPEERS:
+      break 
+
+  peerfile.close()
+  return numpeers 
