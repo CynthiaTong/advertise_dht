@@ -284,17 +284,17 @@ def dhtadvertise_local_lookup(id):
     return values 
 
 def id_from_file(filename):
-  file = openfile(filename, False)
-  if file:
-    value = file.readat(20, 0)
-    file.close()
-    return value 
-  else:
-    file = openfile(filename, True)
+  file = openfile(filename, True)
+  value = file.readat(20, 0)
+  # if file has no content yet 
+  if value == "":
     random_id = util.random_id()
     file.writeat(random_id, 0)
     file.close()
     return random_id 
+  else:
+    file.close()
+    return value 
 
 # expose the ping method to advertise users 
 def dhtadvertise_ping(ip, port):

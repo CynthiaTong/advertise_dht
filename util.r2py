@@ -4,6 +4,9 @@ random = dy_import_module("random.r2py")
 
 LID_BIT_SIZE = 16 
 
+def random_id():
+  return random.random_randombytes(20)
+
 def make_lid():
   return random.random_nbit_int(LID_BIT_SIZE)
 
