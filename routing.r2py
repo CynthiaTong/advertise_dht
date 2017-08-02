@@ -78,7 +78,7 @@ class RoutingTable:
           log ("Node ", n.long_id, " gets pinged.\n")
           tid = util.make_tid("pn", util.make_lid())
           # Ping that node 
-          rpc.ping(self.id, n.ip, n.port, tid, len(tid), self.version_id)
+          rpc.ping(self.id, n.ip, n.port, tid, len(tid), v=self.version_id)
           n.pinged += 1 
           n.last_pinged = getruntime()
           break 
@@ -97,9 +97,9 @@ class RoutingTable:
       nodes += b.get_nodes()
     return nodes 
 
-  # get buckets that haven't been queried in the 10 minutes (to refresh)
+  # get buckets that haven't been queried in 3 minutes (to refresh)
   def get_unvisited_buckets(self):
-    return [b for b in self.buckets if getruntime() - b.last_changed >= 600]
+    return [b for b in self.buckets if getruntime() - b.last_changed >= 3*60]
 
   def refresh_buckets(self):
     buckets = self.get_unvisited_buckets()
@@ -119,15 +119,15 @@ class RoutingTable:
         n = self.buckets.index(b)
         # either go with the previous or next bucket 
         if n > 0:
-          q = self.buckets[n-1]
-        elif n < len(self.buckets):
-          q = self.buckets[n+1]
+          q = self.buckets[n - 1]
+        elif n < len(self.buckets) - 1:
+          q = self.buckets[n + 1]
 
       if q.node_count > 0:
         log ("Sending find_node for bucket refresh.\n")
         n = q.random_node()
         tid = util.make_tid("fn",  util.make_lid())
-        rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, self.version_id)
+        rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, v=self.version_id)
         self.pinged(n, q)
         return True 
     return False 
@@ -144,8 +144,7 @@ class RoutingTable:
   def find_bucket(self, *args):
     arg = args[0]
     if not (isinstance(arg, node.Node) or isinstance(arg, (int, long))):
-      raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % 
-                        type(arg))
+      raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % type(arg))
     for b in self.buckets:
       if b.in_range(arg):
         return self.buckets.index(b), b
@@ -239,7 +238,7 @@ class RoutingTable:
     if len(bucket.replacements) > 0:
       top = bucket.replacements[-1]
       log ("Sending ping to replacement node.\n")
-      rpc.ping(self.id, top.ip, top.port, tid, len(tid), self.version_id)
+      rpc.ping(self.id, top.ip, top.port, tid, len(tid), v=self.version_id)
 
   def __str__(self):
     output = ""
