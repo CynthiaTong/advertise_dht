@@ -1,3 +1,3 @@
-router.utorrent.com,6881, 
-bttracker.debian.org,6881, 
-router.bittorrent.com,6881, 
+130.239.18.159,6881,T{B?F??D?/>?JD 
+67.215.246.10,6881,2?NisQ?J?ͺ???|?
+82.221.103.244,6881,?6isQ?J?ͺ???|?
