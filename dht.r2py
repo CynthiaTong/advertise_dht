@@ -122,7 +122,6 @@ class DHT:
                   self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
                 else:   # nodes_len normal & existing lookup - it's a proper reply 
 
-                  old_closest_node = lookup.get_nodes()[0]
                   self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
                   # extract nodes info from list 
                   i = 0 
@@ -150,10 +149,11 @@ class DHT:
                       lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
                   if lookup and not lookup.done: 
+                    old_closest_node = lookup.get_nodes()[0]
                     # 1 means this node has replied 
                     lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                     # if we failed to get a new closest node, increment stable_results
-                    if old_closest_node == lookup.get_nodes()[0]: 
+                    if old_closest_node == lookup.get_nodes()[0]:
                       self.lookups.stable_results += 1 
                     else:
                       self.lookups.stable_results = 0  
@@ -430,9 +430,9 @@ class DHT:
     if self.refresh_buckets_time <= getruntime():
       refreshed = self.router.refresh_buckets()
       if refreshed:
-        self.refresh_buckets_time = getruntime() + 5 + random.random_int_below(20)   # next refresh in < 25 seconds 
+        self.refresh_buckets_time = getruntime() + 10 + random.random_int_below(20)   # next refresh in 10 - 30 seconds 
       else:
-        self.refresh_buckets_time = getruntime() + 30 + random.random_int_below(60)   # next refresh in 30 - 90 seconds 
+        self.refresh_buckets_time = getruntime() + 60 + random.random_int_below(60)   # next refresh in 1 - 2 minutes  
 
     if self.refresh_buckets_time > getruntime():
       self.to_sleep = self.refresh_buckets_time

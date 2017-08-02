@@ -111,8 +111,9 @@ class RoutingTable:
     if len(buckets) == 0:
       return False 
 
+    refreshed = False 
     for b in buckets:
-      random_id = b.random_id()
+      random_id = util.int_to_bytes(b.random_id())
       # if bucket empty, try fill it from neighboring buckets 
       q = b 
       if b.node_count() == 0:
@@ -129,8 +130,9 @@ class RoutingTable:
         tid = util.make_tid("fn",  util.make_lid())
         rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, v=self.version_id)
         self.pinged(n, q)
-        return True 
-    return False 
+        refreshed = True 
+
+    return refreshed
 
   def find_node(self, target_id):
     i, bucket = self.find_bucket(target_id)
