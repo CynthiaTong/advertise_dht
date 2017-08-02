@@ -57,9 +57,10 @@ class DHT:
 
         elif msg.has_key("q") and msg["q"] == "get":            
           log ("Get!\n")
-          self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
           verified = self.verify_get(msg, source_ip, source_port, my_port)
           if verified:
+            sender_id = msg["a"]["id"]
+            self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
             target = msg["a"]["target"]
             target_id_long = util.string_to_long(target)
             tid = msg["t"]
@@ -186,7 +187,6 @@ class DHT:
                 v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
                 i += 6
                 filtered_values.append((v_ip, v_port))
-                # log (v_ip, ": ", v_port, "\n")
 
               # since we've got values, stop the lookup and return callback
               if lookup and not lookup.done:  
@@ -196,7 +196,6 @@ class DHT:
           elif util.tid_match(tid, "gt"):
             try: 
               res = util.decoder(buf)
-              # log (res, "\n")
 
               tid = res["t"]
               token = res["r"]["token"]
@@ -213,18 +212,17 @@ class DHT:
              
               # check nodes_len is normal 
               if not len(nodes) % 26 == 0:
-                log ("Unexpected length for node info!\n")
+                log ("Unexpected length for node info: %d\n" % len(nodes))
               elif lookup == None:
                 log ("Unknown get lookup!\n")
                 self.router.add_contact(sender_id, source_ip, source_port, 1)   # 1 for query (msg)
               else: # nodes_len normal & existing lookup - it's a proper reply 
+                # return if we've got value item 
+                if len(values) > 0:
+                  return self.lookups.lookup_finished(lookup, callback, values=values, res=res["r"])
+
                 if not lookup.lookup_done:
                   old_closest_node = lookup.get_nodes()[0]
-
-                  # return if we've got value item 
-                  if len(values) > 0:
-                    v = util.decoder(values)
-                    return self.lookups.lookup_finished(lookup, callback, values=v, res=res["r"])
 
                   # log ("Got %d nodes for tid: %s\n" % (len(nodes)/26, tid))
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
@@ -291,7 +289,6 @@ class DHT:
                       n.pinged = 0 
 
                       if acked == 0: 
-                        # log(lookup)
                         log ("Got new reply to announce_peer/put from: %s %d\n" %(source_ip, source_port))
                         self.lookups.lookup_step(lookup, callback, self.version_id, my_port, finished=1)
                       break 
@@ -373,7 +370,7 @@ class DHT:
         if opts["seq"] < st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", my_port, self.version_id)
           return False 
-      # TODO: verify signiture - need ed25519 supercop/ref10 support 
+        # TODO: verify signiture - need ed25519 supercop/ref10 support 
   
     except:
       log ("Invalid put request!\n")

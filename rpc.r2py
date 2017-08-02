@@ -171,7 +171,7 @@ def put(self_id, value, ip, port, tid, token, my_port=63101, opts=None):
       msg["a"]["cas"] = opts["cas"]
 
   msg = util.encoder(msg)
-  log (msg, "\n")
+  # log (msg, "\n")
   return send(msg, ip, port, my_port)
 
 
@@ -211,7 +211,7 @@ def send_get(self_id, ip, port, value_obj, nodes_str, tid, token, my_port=63101)
 
   if value_obj:
     msg["r"]["v"] = value_obj["a"]["v"]
-    opts = msg["a"]
+    opts = value_obj["a"]
     # additional mutable info 
     if opts.has_key("k"):
       msg["r"]["k"] = opts["k"]
