@@ -21,11 +21,12 @@ class Storage:
       if self.values[id_key]["a"]["v"] == value_obj["a"]["v"]:
         self.values[id_key]["stored_time"] = getruntime()
       else:
-        return 
+        return False 
     else: 
       self.values[id_key] = value_obj 
       self.values[id_key]["stored_time"] = getruntime()
       self.numvalues += 1
+    return True 
     
   def retrieve_value(self, id_key):
     if id_key in self.values:
@@ -62,7 +63,7 @@ class Storage:
       self.numpeers -= len(value) - len(filtered)
 
     for key, value in self.values.items():
-      if getruntime() - value['stored_time'] > 4 * self.ttl:    # typically values expire every 2 hours
+      if getruntime() - value["stored_time"] > 4 * self.ttl:    # typically values expire every 2 hours
         del self.values[key]
         self.numvalues -= 1 
 

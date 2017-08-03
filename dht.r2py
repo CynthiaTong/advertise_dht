@@ -51,9 +51,12 @@ class DHT:
           verified = self.verify_put(msg, source_ip, source_port, my_port)
           if verified:
             sender_id = msg["a"]["id"]
-            self.storage.store_value(sender_id, msg)
+            stored = self.storage.store_value(sender_id, msg)
             # log (self.storage.retrieve_value(sender_id), "\n")
-            return rpc.send_put(self.id, source_ip, source_port, msg["t"], my_port)
+            if stored: 
+              return rpc.send_put(self.id, source_ip, source_port, msg["t"], my_port)
+            else: 
+              return rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Same seq but values different", my_port, self.version_id)
 
         elif msg.has_key("q") and msg["q"] == "get":            
           log ("Get!\n")
@@ -363,7 +366,12 @@ class DHT:
       if opts.has_key("salt") and len(opts["salt"]) > 64:
         rpc.send_error(source_ip, source_port, tid, len(tid), 207, "Salt too big", my_port, self.version_id)
         return False 
+      # if the key-value already exist in storage, we can only update it - requiring a mutable put message  
       if st:
+        # if the put does not have all the required fields for mutable updates, prevent it 
+        if not (opts.has_key("k") and opts.has_key("seq") and opts.has_key("sig")):
+          rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Lack mutable attributes", my_port, self.version_id)
+          return False 
         if opts.has_key("cas") and not opts["cas"] == st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", my_port, self.version_id)
           return False 
