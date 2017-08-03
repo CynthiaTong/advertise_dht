@@ -1,0 +1,77 @@
+"""
+  <Purpose> Test DHT RoutingTable class properties and methods 
+"""
+routing = dy_import_module("routing.r2py")
+bucket = dy_import_module("bucket.r2py")
+node = dy_import_module("node.r2py")
+random = dy_import_module("random.r2py")
+util = dy_import_module("util.r2py")
+
+router_id = random.random_randombytes(20)
+router = routing.RoutingTable(router_id, 4)
+nodes = list()
+
+def test_initial_bucket():
+  assert len(router.buckets) == 1, "fails to initialize a bucket."
+  assert router.buckets[0].min == 0, "init bucket's min value is wrong (not 0)."
+  assert router.buckets[0].max == 2**160, "init bucket's max value is wrong (not 2**160)."
+
+def test_add_contact():
+  try: 
+    for i in range(10):
+      n = node.Node(random.random_randombytes(20),"128.0.0.1", random.random_int_below(10000))
+      nodes.append(n)
+      router.add_contact(n.id, n.ip, n.port, i % 2)
+    assert len(router.buckets) > 1, "must split bucket the first time capacity is exceeded."
+  except: 
+    log ("Error adding nodes to routing table.\n")
+
+def test_find_node():
+  n1 = node.Node(random.random_randombytes(20),"138.43.232.1", random.random_int_below(10000))
+  for b in router.buckets: 
+    for n in b.get_nodes(): 
+      router.find_node(n)
+      assert n is not None, "fails to find existing node in routing table."
+
+  x = router.find_node(n1)
+  assert x is None, "does not return None when finding non-existing node."
+
+def test_find_bucket():
+  try: 
+    router.find_bucket("abc")
+  except TypeError:
+    pass 
+  except: 
+    log ("Wrong error thrown by find_bucket().\n")
+
+  try: 
+    router.find_bucket(-1)
+  except ValueError:
+    pass 
+  except: 
+    log ("Wrong error thrown by find_bucket().\n")
+
+  try: 
+    i, b = router.find_bucket(nodes[random.random_int_below(9)])
+    assert b is not None, "cannot find bucket for existing node."
+    assert 0 <= i < len(router.buckets), "wrong index returned by find_bucket()."
+  except: 
+    log ("Error finding bucket for existing node in routing table.\n")
+
+def test_get_closest_good_nodes():
+  n_list = router.get_closest_good_nodes(0)
+  assert len(n_list) <= router.ksize, "number of closest nodes exceeds k."
+  ids = [n[:20] for n in n_list]
+  for i in range(len(ids) - 1):
+    assert util.string_to_long(ids[i]) <= util.string_to_long(ids[i + 1]), "closest nodes are not sorted."
+  for n in router.get_all_nodes():
+    if n.id not in ids:
+      assert util.string_to_long(ids[-1]) <= n.long_id, "fails to get all closest nodes."
+
+
+if callfunc == "initialize":
+  test_initial_bucket()
+  test_add_contact()
+  test_find_node()
+  test_find_bucket()
+  test_get_closest_good_nodes()

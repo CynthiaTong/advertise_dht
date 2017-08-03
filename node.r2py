@@ -1,8 +1,7 @@
 util = dy_import_module("util.r2py")
 
 class Node:
-
-   """
+  """
     <Purpose>
     Nodes stores peer information. It's the basic data unit in a Bucket. 
     <Side Effects>

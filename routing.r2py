@@ -4,7 +4,6 @@ rpc = dy_import_module("rpc.r2py")
 util = dy_import_module("util.r2py")
 random = dy_import_module("random.r2py")
 
-
 class RoutingTable:
   def __init__(self, string_id, ksize, version_id=None):
     self.id = string_id
@@ -14,16 +13,29 @@ class RoutingTable:
     self.expire_stuff_time = 0  
     self.initial_bucket()
 
+  """
+    Initialize the first bucket in this Routing Table. 
+    Integer id range: [0, 2^160), which can represent any 20-byte string ids. 
+
+  """
   def initial_bucket(self):
     self.buckets = [bucket.Bucket(0, 2**160, self.ksize)]
 
+  """
+    Split the bucket at a certain index in our bucket list. 
+
+  """
   def split_bucket(self, index, bucket):
+    # Ping the node at the top of the bucket's replacement list 
     self.ping_replacement(bucket)
     bucket_1, bucket_2 = bucket.split()
     self.buckets[index] = bucket_1 
-    self.buckets.insert(index+1, bucket_2)
+    self.buckets.insert(index + 1, bucket_2)
 
-  # purge all bad nodes with pinged value >= 4 
+  """
+    Purge bad nodes whose pinged value >= 4 in all buckets 
+
+  """
   def expire_buckets(self):
     for b in self.buckets:
       for n in b.nodes:
@@ -31,14 +43,18 @@ class RoutingTable:
           b.remove_node(n)
           # ping a replacement node 
           self.ping_replacement(b)
+          # next expire_stuff_time in 2 - 6 minutes  
           self.expire_stuff_time = getruntime() + 120 + random.random_int_below(240)
 
   """
-    not necessarily "new" contact 
-    message_type: 
+    Add a contact to this routing table, and updates its timing info based on 
+    its message type. 
+    
+    message types: 
       0 for reply 
       1 for query 
       2 for everything else  
+
   """
   def add_contact(self, sender_id, ip, port, message_type):
 
@@ -57,14 +73,14 @@ class RoutingTable:
     for n in bucket.nodes:
       if not n.good_node():
         bucket.remove_node(n)
-        log ("Node ", n.long_id, " gets removed. ", 
-              n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
+        log ("Node ", n.id, " gets removed. ", n.pinged, "  ", n.last_queried, "  ", n.last_replied ,"\n")
         break 
 
+    # if node is successfully added, return True 
     if bucket.add_node(new_node, message_type):
       return True 
   
-    # New node and bucket full of good nodes 
+    # New node and bucket is full of good nodes 
 
     # if table's owner node is in the bucket, split 
     if bucket.in_range(self.long_id):
@@ -75,9 +91,8 @@ class RoutingTable:
       for n in bucket.nodes:
         # find a dubious node to Ping 
         if n.pinged >= 3 and n.last_pinged < getruntime() - 15:
-          log ("Node ", n.long_id, " gets pinged.\n")
+          log ("Node ", n.id, " gets pinged.\n")
           tid = util.make_tid("pn", util.make_lid())
-          # Ping that node 
           rpc.ping(self.id, n.ip, n.port, tid, len(tid), v=self.version_id)
           n.pinged += 1 
           n.last_pinged = getruntime()
@@ -85,35 +100,39 @@ class RoutingTable:
       # add to bucket's replacement list if there's space left 
       if len(bucket.replacements) < self.ksize:
         bucket.add_replacement(new_node, message_type)
+    # node is not added (it might be added to replacement instead), return False 
     return False 
 
-  def bootstrap_node(self, id, ip, port):
-    n = node.Node(id, ip, port)
-    return self.add_contact(id, ip, port, 2)
+  """
+    Return all nodes in this routing table. 
 
+  """
   def get_all_nodes(self):
     nodes = list()
     for b in self.buckets:
       nodes += b.get_nodes()
     return nodes 
 
-  # get buckets that haven't been queried in 3 minutes (to refresh)
+  """
+    Return a list of buckets that haven't been queried in 3 minutes (to refresh)
+
+  """
   def get_unvisited_buckets(self):
     return [b for b in self.buckets if getruntime() - b.last_changed >= 3*60]
 
+  """
+    Refresh all buckets that need refreshing 
+
+  """
   def refresh_buckets(self):
     buckets = self.get_unvisited_buckets()
-
     log ("%d buckets need refresh! \n" % len(buckets))
-    # for b in buckets:
-    #   log (str(b), "\n")
 
     if len(buckets) == 0:
       return False 
 
     refreshed = False 
     for b in buckets:
-      random_id = util.int_to_bytes(b.random_id())
       # if bucket empty, try fill it from neighboring buckets 
       q = b 
       if b.node_count() == 0:
@@ -126,6 +145,8 @@ class RoutingTable:
 
       if q.node_count > 0:
         log ("Sending find_node for bucket refresh.\n")
+        # get a random id and a random node from this bucket 
+        random_id = util.int_to_bytes(b.random_id())
         n = q.random_node()
         tid = util.make_tid("fn",  util.make_lid())
         rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, v=self.version_id)
@@ -134,6 +155,10 @@ class RoutingTable:
 
     return refreshed
 
+  """
+    Given a target id, return the node with that id or return None if node does not exist 
+
+  """
   def find_node(self, target_id):
     i, bucket = self.find_bucket(target_id)
     for n in bucket.get_nodes():
@@ -141,8 +166,11 @@ class RoutingTable:
         return n 
     return None 
 
-  # find proper bucket for contact (id in bucket's range)
-  # return index and the bucket itself 
+  """
+  Given a node instance or an integer id number, find the bucket which the node/id falls into. 
+  Return index in the bucket list and the bucket itself 
+
+  """
   def find_bucket(self, *args):
     arg = args[0]
     if not (isinstance(arg, node.Node) or isinstance(arg, (int, long))):
@@ -150,9 +178,14 @@ class RoutingTable:
     for b in self.buckets:
       if b.in_range(arg):
         return self.buckets.index(b), b
-
+    # if unable to find a proper bucket, the parameter is out of our range 
     raise ValueError("Node ID not in range: 0 - 2**160")
 
+  """
+    Return a formatted list of closest nodes. 
+    The node id, ip and port info are formatted to a string for sending as part of a RPC message 
+
+  """
   def insert_closest_node(self, nodes_list, target_id, node):
     i = 0 
     while i < len(nodes_list):
@@ -160,6 +193,7 @@ class RoutingTable:
       # if node info is already in nodes_list, return 
       if node.id == i_id:
         return nodes_list 
+      # if node is closer to target than nodes_list[i]
       if util.compare_distance(target_id, node.long_id, util.string_to_long(i_id)) < 0:
         break 
       i += 1 
@@ -172,17 +206,21 @@ class RoutingTable:
     # convert port to network order 
     network_order_port = str(util.htons(node.port)) 
     nodes_list.insert(i, node.id + packed_ip + network_order_port)
-
+    # only return k closest nodes 
     while len(nodes_list) > self.ksize:
       nodes_list.pop()
 
     return nodes_list 
 
-  # Get the strictly closest good nodes to a given target ID (for sending response)
-  # IMPORTANT: target_ids are INTs! 
+  """
+  Get the strictly closest good nodes to a given target ID.
+  Used for replying to get_peers/find_node/get queries 
+  Note: target_ids are integer values. 
+
+  """
   def get_closest_good_nodes(self, target_id):
     nodes_list = list()
-    # linear scan through the routing table, and add to lookup list 
+    # linear scan through the routing table, and add to nodes list 
     for b in self.buckets:
       for n in b.get_nodes():
         if n.good_node():
@@ -190,11 +228,12 @@ class RoutingTable:
     log (len(nodes_list) , " nodes in nodes_list.\n")
     return nodes_list 
 
-  # Might just need to scan the whole routing table to find STRICTLY closest 
-  # (above get_closest_nodes function)
+  """
+    Get nodes for a specific lookup 
+  """
   def get_lookup_nodes(self, lookup, target_id):
 
-    # find the bucket and add its nodes 
+    # find the bucket in which the target id resides and add its nodes 
     current_index, current_bucket = self.find_bucket(target_id)
     self.add_to_lookup(current_bucket, lookup)
 
@@ -220,12 +259,31 @@ class RoutingTable:
     # Note: closest in this list at head 
     return lookup
 
+  """
+    An alternative approach to get nodes for lookup is linear scan through the table and add, 
+    this might be more efficient, but it's not specified by BitTorrent or the original Kademlia paper. 
+
+  """
+  # def get_lookup_nodes(self, lookup, target_id):
+  #   for b in self.buckets:
+  #     for n in b.get_nodes():
+  #       lookup.insert(n.id, n.ip, n.port) 
+  #   return lookup 
+
+  """
+    Helper for adding nodes inside a bucket to a lookup 
+
+  """
   def add_to_lookup(self, bucket, lookup):
     nodes = bucket.get_nodes()
     for n in nodes:
       lookup.insert(n.id, n.ip, n.port) 
 
+  """
+    Update a node's pinged and last_pinged attributes 
+    Ping a replacement node if this node has gone bad (pinged >= 3)
 
+  """
   def pinged(self, node, bucket=None):
     node.pinged += 1 
     node.last_pinged = getruntime()
@@ -235,6 +293,10 @@ class RoutingTable:
       else:
         self.ping_replacement(self.find_bucket(node)[1])
 
+  """
+    Ping the top node in a bucket's replacement list 
+
+  """
   def ping_replacement(self, bucket):
     tid = util.make_tid("pn", util.make_lid())
     if len(bucket.replacements) > 0:
@@ -242,6 +304,10 @@ class RoutingTable:
       log ("Sending ping to replacement node.\n")
       rpc.ping(self.id, top.ip, top.port, tid, len(tid), v=self.version_id)
 
+  """
+    String representation of the routing table 
+
+  """
   def __str__(self):
     output = ""
     for b in self.buckets:
