@@ -5,13 +5,13 @@ sha = dy_import_module("sha.r2py")
 peerfile = dy_import_module("peerfile.r2py")
 
 # peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
-# peers = [("192.171.20.108", 63102), ("router.utorrent.com", 6881)]
 peers = peerfile.import_peers("peers.txt")
+# log (peers)
 
 my_ip = getmyip()
-my_port = 63101
-setup_port = 63102
-timeout = 600 
+MY_PORT = 63101
+SETUP_PORT = 63102
+timeout = 600   # set timeout to be 10 min for now  
 mycontext["setup"] = False 
 mycontext["announce"] = False 
 mycontext["lookup"] = False 
@@ -34,11 +34,11 @@ class DHTAdvertiseError(Exception):
   """ Error announcing to the DHT """
 
 
-def dhtadvertise_setup(my_id, my_version=None):
+def dhtadvertise_setup(my_id, my_version=None, setup_port=SETUP_PORT):
   try: 
     mycontext["dht"] = dht_module.DHT(my_id, my_version)
-    # listen = call_listen("setup")
-    createthread(setup_listen)
+    listen = setup_listen(setup_port)
+    createthread(listen)
 
     for p in peers:
       ip = gethostbyname(p[0])
@@ -71,35 +71,37 @@ def periodic(port):
         mycontext["dht"].periodic(port, callback)
   return perio 
 
-def setup_listen():
+def setup_listen(port):
+  def listen():
+    starttime = getruntime()
+    udpresponsesocket = listenformessage(my_ip, port)
 
-  starttime = getruntime()
-  udpresponsesocket = listenformessage(my_ip, setup_port)
+    while getruntime() < starttime + timeout:
+      try:  
+        remoteip, remoteport, message = udpresponsesocket.getmessage()
+        mycontext["dht"].new_message(message, remoteip, remoteport, port, callback)
 
-  while getruntime() < starttime + timeout:
-    try:  
-      remoteip, remoteport, message = udpresponsesocket.getmessage()
-      mycontext["dht"].new_message(message, remoteip, remoteport, setup_port, callback)
+      except SocketWouldBlockError:
+        sleep(0.1)
+      except SocketClosedLocal:
+        break
 
-    except SocketWouldBlockError:
-      sleep(0.1)
-    except SocketClosedLocal:
-      break
+    udpresponsesocket.close()
 
-  udpresponsesocket.close()
+    # save to peerfile 
+    contacts = mycontext["dht"].router.get_all_nodes()
+    peers = [ n.ip + "," + str(n.port) + "," + n.id + "\n" for n in contacts]
+    # log (peers)
+    num = peerfile.export_peers(peers, "peers.txt")
+    log ("Saved %d peers to peerfile.\n" % num)
 
-  # save to peerfile 
-  contacts = mycontext["dht"].router.get_all_nodes()
-  peers = [ n.ip + "," + str(n.port) + "," + n.id + "\n" for n in contacts]
-  num = peerfile.export_peers(peers, "peers.txt")
-  log ("Saved %d peers to peerfile.\n" % num)
+    if not mycontext["setup"]:
+      raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node setup.")
 
-  if not mycontext["setup"]:
-    raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node setup.")
+    exitall()
+  return listen 
 
-  exitall()
-
-def call_listen(operation_type):
+def call_listen(operation_type, my_ip=my_ip, my_port=MY_PORT):
   def listen():
     mycontext["lock"].acquire(True)
     starttime = getruntime()
@@ -175,21 +177,21 @@ def callback(event, id, data, data_len=0, res=None):
     log (output)
 
 
-def dhtadvertise_lookup(my_id, target_id, callback, version=None):
+def dhtadvertise_lookup(my_id, target_id, callback, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
 
   target_id = str(target_id)
   if version:
     version = str(version) 
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, version)
+    dhtadvertise_setup(my_id, version, setup_port)
  
   while True:
     if mycontext["setup"]:
       listen = call_listen("lookup")
       createthread(listen)
 
-      mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version)
+      mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version, my_port)
       break 
 
 """
@@ -197,27 +199,27 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None):
   Announce that the peer, controlling the querying node, is downloading a torrent on a port
   If port is not specified, automatically use the source port of the UDP packets 
 """
-def dhtadvertise_announce_once(my_id, target_id, callback, port=my_port, version=None): 
+def dhtadvertise_announce_once(my_id, target_id, callback, port=MY_PORT, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
   if version:
     version = str(version) 
   if port < 1 or port > 65535:
     raise ValueError("Port number must be in range: 1 - 65535.")
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, version)
+    dhtadvertise_setup(my_id, version, setup_port)
 
   while True:
     if mycontext["setup"]:
       listen = call_listen("announce")
       createthread(listen)
 
-      mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version)
+      mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version, my_port)
       break 
 
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, **opts): 
+def dhtadvertise_put(my_id, value, callback, my_port=MY_PORT, setup_port=SETUP_PORT, **opts): 
   if not value:
     raise ValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
@@ -248,7 +250,7 @@ def dhtadvertise_put(my_id, value, callback, **opts):
     key = sha.sha_hash(value)
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id)
+    dhtadvertise_setup(my_id, setup_port=setup_port)
 
   while True:
     if mycontext["setup"]:
@@ -256,12 +258,20 @@ def dhtadvertise_put(my_id, value, callback, **opts):
       createthread(listen)
 
       # 2 for put lookup
-      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, value=value, opts=opts)
+      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
       break 
+
+  # BELOW CODE: for testing only !!!
+  # createthread(setup_listen)
+
+  # for p in peers:
+  #   tid = util.make_tid("pt", util.make_lid())
+  #   token = util.make_token(getmyip(), mycontext["dht"].secret_package[1])
+  #   rpc.put(my_id, value, p[0], int(p[1]), tid, token, 63102)
 
   return key  # return key for future lookup 
 
-def dhtadvertise_get(my_id, key, callback): 
+def dhtadvertise_get(my_id, key, callback, my_port=MY_PORT, setup_port=SETUP_PORT): 
   if not (isinstance(key, str) and len(key) == 20):
     raise ValueError("DHT get: key must be a 20-byte string.")
 
@@ -271,11 +281,19 @@ def dhtadvertise_get(my_id, key, callback):
   while True:
     if mycontext["setup"]:
       listen = call_listen("get")
-      createthread(listen)
+      createthread(listen, setup_port=setup_port)
 
       # 1 for get lookup
-      mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None)
+      mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None, my_port=my_port)
       break 
+
+  # BELOW CODE: for testing only !!!
+  # createthread(setup_listen)
+
+  # for p in peers:
+  #   tid = util.make_tid("gt", util.make_lid())
+  #   rpc.get(my_id, id, p[0], int(p[1]), tid, setup_port)
+
 
 # if the values we're looking for exist in local storage 
 def dhtadvertise_local_lookup(id):
