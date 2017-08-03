@@ -105,6 +105,7 @@ def call_listen(operation_type, my_ip=my_ip, my_port=MY_PORT):
   def listen():
     mycontext["lock"].acquire(True)
     starttime = getruntime()
+
     udpresponsesocket = listenformessage(my_ip, my_port)
 
     while getruntime() < starttime + timeout:
@@ -112,7 +113,7 @@ def call_listen(operation_type, my_ip=my_ip, my_port=MY_PORT):
       #   break 
       try:  
         remoteip, remoteport, message = udpresponsesocket.getmessage()
-        mycontext["dht"].new_message(message, remoteip, remoteport, callback=callback)
+        mycontext["dht"].new_message(message, remoteip, remoteport, my_port, callback)
 
       except SocketWouldBlockError:
         sleep(0.1)
@@ -188,7 +189,7 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None, my_port=MY_POR
  
   while True:
     if mycontext["setup"]:
-      listen = call_listen("lookup")
+      listen = call_listen("lookup", my_port=my_port)
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version, my_port)
@@ -210,7 +211,7 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=MY_PORT, version
 
   while True:
     if mycontext["setup"]:
-      listen = call_listen("announce")
+      listen = call_listen("announce", my_port=my_port)
       createthread(listen)
 
       mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version, my_port)
@@ -254,7 +255,7 @@ def dhtadvertise_put(my_id, value, callback, my_port=MY_PORT, setup_port=SETUP_P
 
   while True:
     if mycontext["setup"]:
-      listen = call_listen("put")
+      listen = call_listen("put", my_port=my_port)
       createthread(listen)
 
       # 2 for put lookup
@@ -280,7 +281,7 @@ def dhtadvertise_get(my_id, key, callback, my_port=MY_PORT, setup_port=SETUP_POR
 
   while True:
     if mycontext["setup"]:
-      listen = call_listen("get")
+      listen = call_listen("get", my_port=my_port)
       createthread(listen, setup_port=setup_port)
 
       # 1 for get lookup
@@ -317,3 +318,23 @@ def id_from_file(filename):
 # expose the ping method to advertise users 
 def dhtadvertise_ping(ip, port):
   dht.ping_node(ip, port)
+
+
+# random module for testing only 
+random = dy_import_module("random.r2py")
+rand = random.random_randombytes(20)
+id = id_from_file("example.id")
+
+# UDP Port range: 63100, 63201
+
+if callfunc == "initialize":
+  # port, setup port 
+  if len(callargs) == 2:
+    my_p = int(callargs[0])
+    setup_p = int(callargs[1])
+    log (my_p, " ", setup_p, "\n")
+    # dhtadvertise_setup(id, "AD\0\0")
+    dhtadvertise_lookup(id, rand, callback, "AD\0\0", my_p, setup_p)
+    # dhtadvertise_announce_once(id, rand, callback, port=my_p, version="AD\0\0", my_port=my_p, setup_port=setup_p)
+  else:
+    raise ValueError("must call dht_advertise.r2py with port arguemnts.")
