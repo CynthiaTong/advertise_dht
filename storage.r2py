@@ -1,21 +1,45 @@
-
+# default storage expire interval: 30 minutes 
 TTL = 30 * 60 
-# MAX_PEERS = ??
-MAX_VALUES = 1000
 
 class Storage: 
+  """
+    <Purpose>
+    Store peers and value items for a DHT node. 
+    <Side Effects>
+    Used by the dht module. 
+    <Example Use>
+    # create a storage object 
+    st = Storage(<string id>, <optional ttl value>)
+    # store a value  
+    st.store_value(key, value)
+    # retrieve a value  
+    st.retrieve_value(key)
+    # store a peer 
+    st.store(<id>, <ip>, <port>)
+    # retrieve a peer 
+    st.retrieve(<id>)
+    # expire this storage 
+    st.expire_storage()
+
+  """   
 
   def __init__(self, string_id, ttl=TTL):
-    """
-      Default storage expire time: 32 min 
-    """
     self.id = string_id
     self.ttl = ttl  
-    self.peers = dict() # dictionary of arrays of peer objects 
+    self.peers = dict()   # dictionary of arrays of peer objects 
     self.numpeers = 0 
     self.values = dict()  # data from put requests 
     self.numvalues = 0 
 
+  """
+    Store a value object under an id key. 
+    If key already exists and sequence numbers are equal:
+      update the stored_time attribute if values are identical 
+      ignore the new value 
+    Otherwise, store the new value 
+    Note: the value object is always of the dictionary type! 
+
+  """
   def store_value(self, id_key, value_obj):
     if self.values.has_key(id_key) and self.values[id_key]["a"]["seq"] == value_obj["a"]["seq"]:
       if self.values[id_key]["a"]["v"] == value_obj["a"]["v"]:
@@ -27,19 +51,27 @@ class Storage:
       self.values[id_key]["stored_time"] = getruntime()
       self.numvalues += 1
     return True 
-    
+  
+  """
+    Retrieve the value associated with the key parameter. 
+
+  """
   def retrieve_value(self, id_key):
     if id_key in self.values:
       return self.values[id_key]
 
-  # store the <id, ip, port> triple into peers dict 
+  """
+    Store the <id, ip, port> triple into peers dictionary. 
+
+  """
   def store(self, id_key, ip, port):
     storage_val = self.peers.get(id_key)
-
+    # if it's a new key 
     if storage_val == None:
       self.peers[id_key] = [Peer(ip, port, getruntime())]
       self.numpeers += 1 
     else:
+      # try adding the new value to the storage_val list 
       new_val = True 
       for v in storage_val:
         if ip == v.ip and port == v.port:
@@ -49,11 +81,19 @@ class Storage:
         storage_val.append(Peer(ip, port, getruntime()))
         self.numpeers += 1 
 
+  """
+    Retrieve the peer associated with the key parameter. 
+
+  """
   def retrieve(self, id_key):
     if id_key in self.peers:
       return self.peers[id_key]
 
-  # should be called frequently 
+  """
+    Expire peers and values in this storage. 
+    Peers expire in 30 minutes, values expire in 2 hours. 
+
+  """
   def expire_storage(self):
     for key, value in self.peers.items():
       # log (value, "\n")
@@ -67,19 +107,36 @@ class Storage:
         del self.values[key]
         self.numvalues -= 1 
 
+  """
+    String representation of this storage. 
 
-  def __iter__(self):
-    return iter(self.peers)
-
+  """
   def __str__(self):
-    output = "Storage: \n"
+    output = "Storage ID: %s \nPeers: \n" % self.id 
     for key, value in self.peers.items():
       for p in value:
         output += str(p) + "\t" 
       output += "\n"
+    output += "Values: \n"
+    for key, value in self.values.items():
+      output += key + ": " + str(value)
+    output += "\n"
     return output 
 
+
 class Peer:
+  """
+    <Purpose>
+    Holding peer information. 
+    <Side Effects>
+    Used by the Storage class. 
+    <Example Use>
+    # create a peer object 
+    peer = Peer(<ip>, <port>, <storage time>)
+    # update the storage time 
+    peer.update_time(<time>)
+  
+  """   
   def __init__(self, ip, port, time):
     self.ip = ip 
     self.port = port
@@ -90,4 +147,4 @@ class Peer:
 
   def __str__(self):
     age = getruntime() - self.stored_time
-    return self.ip + ":" + str(self.port) + "  Age: " + str(age) + " secs"
+    return "%s: %d  %.3f" % (self.ip, self.port, age)
