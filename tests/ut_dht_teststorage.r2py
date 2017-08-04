@@ -1,0 +1,75 @@
+"""
+  <Purpose> Test DHT Storage class properties and methods 
+"""
+
+storage = dy_import_module("storage.r2py")
+
+st = storage.Storage("random_id", 0.5)
+
+def test_store():
+  st.store("k1", "127.0.0.1", 1000)
+  p = st.peers["k1"]
+  st_time = p[0].stored_time
+  assert p[0].ip == "127.0.0.1", "Peer storage error. Wrong ip address."
+  assert p[0].port == 1000, "Peer storage error. Wrong port number."
+  assert st.numpeers == 1, "Wrong numpeers attribute."
+
+  st.store("k1", "127.0.0.1", 1000)
+  assert p[0].stored_time > st_time, "stored_time is not updated properly."
+  st.store("k1", "128.0.0.1", 2000)
+  assert p[1].ip == "128.0.0.1", "Peer storage error. Wrong ip address."
+  assert p[1].port == 2000, "Peer storage error. Wrong port number."
+  assert st.numpeers == 2, "Wrong numpeers attribute."
+
+  st.store("k2", "139.23.0.1", 3000)
+  assert st.numpeers == 3, "Wrong numpeers attribute."
+
+def test_retrieve():
+  p = st.retrieve("k1")
+  assert p is not None, "Cannot retrieve existing peer."
+  assert len(p) == 2, "Retrieved wrong number of peers."
+  p = st.retrieve("k10")
+  assert p is None, "Retrieved non-existing peer."
+
+def test_store_value():
+  st.store_value("v1", {"int": 0})
+  st.store_value("v2", {"str": "hello!"})
+  st.store_value("v3", {"list": [0, 1, 200, 300]})
+  st.store_value("v4", {"dict": {"a": "b"}})
+
+  assert st.values["v1"]["int"] == 0, "Wrong int value stored."
+  assert st.values["v2"]["str"] == "hello!", "Wrong str value stored."
+  assert st.values["v3"]["list"] == [0, 1, 200, 300], "Wrong list value stored."
+  assert st.values["v4"]["dict"] == {"a": "b"}, "Wrong dict value stored."
+  assert st.numvalues == 4, "Wrong number of values stored."
+
+  try: 
+    stored = st.store_value("v5", "abcde")
+    assert stored == False, "Should not have stored non-dict value."
+    log ("Should have thrown TypeError for non-dict value.\n")
+  except TypeError:
+    pass 
+  except:
+    log ("Wrong error thrown for non-dict value.\n")
+
+def test_retrieve_value():
+  v1 = st.retrieve_value("v1")
+  assert v1["int"] == 0, "Cannot retrieve existing value."
+  v10 = st.retrieve_value("v10")
+  assert v10 is None, "Retrieved non-existing value."
+
+def test_expire_storage():
+  sleep(0.5)
+  st.expire_storage()
+  assert st.numpeers == 0, "Did not expire peers properly."
+  sleep(1.5)
+  st.expire_storage()
+  assert st.numvalues == 0, "Did not expire values properly."
+
+
+if callfunc == "initialize":
+  test_store()
+  test_retrieve()
+  test_store_value()
+  test_retrieve_value()
+  test_expire_storage()

@@ -39,6 +39,7 @@ def test_find_node():
 def test_find_bucket():
   try: 
     router.find_bucket("abc")
+    log ("Should throw TypeError for non-int type.\n")
   except TypeError:
     pass 
   except: 
@@ -46,6 +47,7 @@ def test_find_bucket():
 
   try: 
     router.find_bucket(-1)
+    log ("Should throw ValueError for negative int.\n")
   except ValueError:
     pass 
   except: 
