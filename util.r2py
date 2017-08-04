@@ -310,7 +310,7 @@ def invalid_address(ip, port):
 """
 def encoder(obj):
   if isinstance(obj, int):
-    return "i" + str(htons(obj)) + "e"
+    return "i" + str(obj) + "e"
   elif isinstance(obj, str):
     return str(len(obj)) + ":" + obj 
   elif isinstance(obj, list):
@@ -336,6 +336,7 @@ def encoder(obj):
     raise ValueError("Allowed Bencode types: int, string, list, dict. Not: ", type(obj))
 
 def decoder(s):
+
   if not isinstance(s, str):
     raise ValueError("Only string type can be decoded.")
 
@@ -348,6 +349,8 @@ def decoder(s):
         j += 1 
       if not s[j] == "e":
         log("Malformed input. j: %d\n" % j)
+      # skip past the "e" signaling end of int 
+      j += 1 
       return int(int_val), j
     elif s[i] == "l" or s[i] == "d":
       l = list()
