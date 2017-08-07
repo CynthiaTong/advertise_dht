@@ -83,12 +83,12 @@ class DHTLookup:
     # update lookup_time 
     self.lookup_time = getruntime()
 
-  def lookup_step(self, lookup, callback, version, my_port=63101, alpha=3, finished=0):
+  def lookup_step(self, lookup, callback, version, my_port=63101, alpha=14, finished=0):
     # log ("ALPHA: ", alpha, "\n")
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
     # if we have k live nodes or as many as we can get 
-    if all_replied or finished:
+    if (all_replied or finished) and not lookup.done:
       lookup.lookup_done = 1 
       # finished for pure lookup 
       # log ("Lookup Port: %d\n" % lookup.port)
@@ -104,7 +104,7 @@ class DHTLookup:
           elif not n.acked and n.token:
             # if lookup is for announce_peer 
             if lookup.port > 2:
-              log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
+              # log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("ap", lookup.tid)
               rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, my_port, version)
             else: # lookup is for put 
@@ -127,11 +127,6 @@ class DHTLookup:
       return 
     
     # if not all replied 
-    # ignore too frequent lookups 
-    if lookup.step_time > getruntime() - 0.1:
-      log ("TOO FREQUENT\n")
-      return 
-
     # send alpha get_peers / get requests to nodes we have NOT queried 
     send_count = 0       
     if lookup.port == 1 or lookup.port == 2:
@@ -160,9 +155,11 @@ class DHTLookup:
         else:
           return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
       elif lookup.port > 2:
-        event = DHT_EVENT_ANNOUNCE_DONE
+        acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
+        return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes))  
       elif lookup.port == 2:
-        event = DHT_EVENT_PUT_DONE
+        acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
+        return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes)) 
       elif lookup.port == 1:
         event = DHT_EVENT_GET_DONE
       else:
@@ -238,6 +235,7 @@ class Lookup:
 
     lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
 
+    # if node id is the same as our own, return 
     if id == self.id:
       return 
 
@@ -274,6 +272,7 @@ class Lookup:
     # if there's room in capacity after looping through self.list, just append new node 
     if len(self.list) < self.capacity:
       self.list.append(lookup_node)
+
 
   def remove(self, lookup_node):
     if lookup_node in self.list:

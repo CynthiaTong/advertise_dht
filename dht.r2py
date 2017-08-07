@@ -47,7 +47,7 @@ class DHT:
       # if put/get req 
       elif isinstance(msg, dict):
         if msg.has_key("q") and msg["q"] == "put":
-          log ("Put!\n")
+          log ("Put req from: %s %d\n" %(source_ip, source_port))
           verified = self.verify_put(msg, source_ip, source_port, my_port)
           if verified:
             sender_id = msg["a"]["id"]
@@ -59,7 +59,7 @@ class DHT:
               return rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Same seq but values different", my_port, self.version_id)
 
         elif msg.has_key("q") and msg["q"] == "get":            
-          log ("Get!\n")
+          log ("Get req from: %s %d\n" %(source_ip, source_port))
           verified = self.verify_get(msg, source_ip, source_port, my_port)
           if verified:
             sender_id = msg["a"]["id"]
@@ -95,7 +95,7 @@ class DHT:
           log ("Faulty message - unparseable: \n", buf, "\n")
           return self.periodic(my_port, callback)
 
-        if sender_id == self.id and source_ip == getmyip():
+        if sender_id == self.id and source_ip == getmyip() and source_port == my_port:
           log ("Received message from self. weird.\n")
           return self.periodic(my_port, callback)
 
@@ -153,26 +153,10 @@ class DHT:
                       lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
                   if lookup and not lookup.done: 
-                    old_closest_node = lookup.get_nodes()[0]
                     # 1 means this node has replied 
                     lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
-                    # if we failed to get a new closest node, increment stable_results
-                    if old_closest_node == lookup.get_nodes()[0]:
-                      self.lookups.stable_results += 1 
-                    else:
-                      self.lookups.stable_results = 0  
-
-                    # log ("--------- LOOKUP ---------\n", str(lookup), "stable results: %d\n" % self.lookups.stable_results)
-              
-                    # avoid too frequent lookup steps 
-                    sleep(0.1)
-                    # if we haven't seen a new closest node for alpha(3) times 
-                    if self.lookups.stable_results >= 3:
-                      # query ALL lookup nodes that haven't replied 
-                      self.lookups.lookup_step(lookup, callback, self.version_id, my_port, alpha=14)
-                    else:
-                      # query another alpha nodes that haven't replied 
-                      self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
+                    # query another alpha nodes that haven't replied 
+                    self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
                 break 
 
             if values_len > 0 and lids[0]:
@@ -225,8 +209,6 @@ class DHT:
                   return self.lookups.lookup_finished(lookup, callback, values=values, res=res["r"])
 
                 if not lookup.lookup_done:
-                  old_closest_node = lookup.get_nodes()[0]
-
                   # log ("Got %d nodes for tid: %s\n" % (len(nodes)/26, tid))
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
 
@@ -251,20 +233,8 @@ class DHT:
                   if lookup: 
                     # 1 means this node has replied 
                     lookup.insert(sender_id, source_ip, source_port, 1, token, len(token))
-                    # if we failed to get a new closest node, increment stable_results
-                    if old_closest_node == lookup.get_nodes()[0]: 
-                      self.lookups.stable_results += 1 
-                    else:
-                      self.lookups.stable_results = 0                
-                    # avoid too frequent lookup steps 
-                    sleep(0.1)
-                    # if we haven't seen a new closest node for alpha(3) times 
-                    if self.lookups.stable_results >= 3:
-                      # query ALL lookup nodes that haven't replied 
-                      self.lookups.lookup_step(lookup, callback, self.version_id, my_port, alpha=14)
-                    else:
-                      # query another alpha nodes that haven't replied 
-                      self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
+                    # query another alpha nodes that haven't replied 
+                    self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
                 
             except Exception, e:
               log ("Faulty response to get. Error: %s\n" % str(e))                

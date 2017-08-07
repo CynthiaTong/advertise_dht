@@ -12,7 +12,6 @@ for i in range(10):
   nodes.append(node.Node(random.random_randombytes(3), "128.10.40.1" + str(i), i * 1000))
 
 def test_add_node():
-
   added = b.add_node(nodes[0], 0)
   assert added, "Error: cannot add node to bucket."
   assert not b.last_changed == 0, "Error: bucket last_changed is not updated upon node addition."
