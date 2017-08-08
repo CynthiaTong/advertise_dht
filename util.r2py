@@ -341,10 +341,10 @@ def invalid_address(ip, port):
     the address is invalid if:
     port is 0, ip starts with 0, 127, or a number greater than 224. 
   """
-    ip_list = [int(n) for n in ip.split(".")]
-    if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
-      return True 
-    return False  
+  ip_list = [int(n) for n in ip.split(".")]
+  if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
+    return True 
+  return False  
 
 
 def encoder(obj):
