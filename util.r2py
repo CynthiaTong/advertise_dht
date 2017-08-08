@@ -3,73 +3,97 @@ sha = dy_import_module("sha.r2py")
 random = dy_import_module("random.r2py")
 
 LID_BIT_SIZE = 16 
+ROTATE_SECRET_INTERVAL = 5 * 60   # rotate secret every 5 minutes 
+SECRET_SIZE = 8
 
+# generate random 20 bytes for use as a DHT node id 
 def random_id():
   return random.random_randombytes(20)
 
+# generate a 2-byte (16 bit) lookup id (lid)
 def make_lid():
   return random.random_nbit_int(LID_BIT_SIZE)
 
-# 4-byte transaction id string  
+# generate a 4-byte transaction id string  
 def make_tid(prefix, sequence):
   output = ""
   for n in prefix:
     output += chr(ord(n) & 0xFF) 
-  binary_seq = "{0:b}".format(sequence)[:16] # get the first 16 bits (2 bytes) of the integer 
-  output += htons(int(binary_seq, 2))
+  binary_seq = "{0:b}".format(sequence)[:16]  # get the first 16 bits (2 bytes) of the integer 
+  output += htons(int(binary_seq, 2))   # convert to network byte order 
   # output += str(sequence)[:2]
-  # log(output, "\n")
-  # return a character / int list 
   return output 
 
-# return the sequence taken from tid if matches, else return -1 
 def tid_match(tid, prefix):
+  """
+  <Purpose>
+    check if transaction id (tid) matches a certain 2-character prefix (for example, "fn" for find_node)
+    return the sequence taken from tid if matches, else return False 
+
+  """
   if len(tid) > 2 and tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
     return tid[2:]
   else:
     return False  
 
-
-ROTATE_SECRET_INTERVAL = 5 * 60
-SECRET_SIZE = 8
-
-# tokens are rotated every 5 min; tokens up to 10 min old are accepted 
 def rotate_secret(secret=None):
+  """
+  <Purpose>
+    Generate and rotate our DHT secret
+    tokens are rotated every 5 min; tokens up to 10 min old are accepted 
+    return the old secret, the newly generated secret, and next rotate time 
+  """
   old_secret = None  
   if secret:
     old_secret = str(secret)
-
+  # 8-byte secret 
   secret = random.random_randombytes(SECRET_SIZE)
   rotate_secret_time = getruntime() + ROTATE_SECRET_INTERVAL 
 
   return (old_secret, secret, rotate_secret_time)
 
-# 16 byte token 
+# generate 16-byte tokens by sha-1 hashing ip concatenated with secret 
 def make_token(ip, secret):
   return sha.sha_hash(str(ip) + secret)
 
+
 def token_match(token, ip, old_secret, secret):
+  """
+  <Purpose>
+    check if token matches our ip and secret. 
+    Note: both secret and old_secret are checked 
+    If match, return True, otherwise return False 
+  """
   if old_secret:
     old_hash = sha.sha_hash(str(ip) + old_secret)
-    if old_hash == token: return True 
+    if old_hash == token: 
+      return True 
   if secret:
     now_hash = sha.sha_hash(str(ip) + secret)
-    if now_hash == token: return True 
+    if now_hash == token: 
+      return True 
 
   return False 
 
+# get the XOR distance between two numbers 
 def xor_distance(num1, num2):
   return num1 ^ num2 
 
-# if positive, dist from num1 > dist from num2 
+
 def compare_distance(target, num1, num2):
+  """
+  <Purpose>
+    compare the XOR distances between target and two other numbers  
+    if positive, distance from num1 is greater than distance from num2 
+  """
   return xor_distance(target, num1) - xor_distance(target, num2)
 
+# convert the dot-seperated ip string to a 4-byte string 
 def ip_as_bytes(ip):
   ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
   return ip_as_bytes
 
-# Converts string of bytes into a long number
+# convert a string of bytes into a long number
 def string_to_long(data):
   num = 0L
   offset = 0
@@ -78,14 +102,11 @@ def string_to_long(data):
     offset += 1
   return num
 
+# convert a number from host to network byte order 
 def htons(num):
-  # if integer is 2-byte 
-  # if (num.bit_length() + 7) // 8 == 2:
   n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
-  # log (n, "\n")
   return int_to_bytes(n)
-  # raise Exception("htons: integer is not 2 bytes.\n")
-  # return -1 
+
 
 def int_to_bytes(long_int):
   """
@@ -121,6 +142,7 @@ def int_to_bytes(long_int):
 
   return byte_string
 
+# convert an iterable collection of bytes to integer 
 def bytes_to_int(bytes):
   n = 0
   # read from bytes and add to n 
@@ -128,19 +150,32 @@ def bytes_to_int(bytes):
     n = n * 256 + int(b)
   return n
 
+# check if string length exceeds a certain max. 
 def length_check(index, length, buf_len):
   if index + length > buf_len:
     log ("Failed length check.\n")
     return False 
   return True 
 
-"""
-  For now (k = 8)
-  Max number of nodes to send: 8 
-  Max number of peers to send: 8 
-"""
 def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6): 
-  # change string.find to a more efficient method??
+  """
+  <Purpose>
+    parse incoming rpc messages. 
+    some constraints: 
+      Max tid length: 8 
+      Max token length: 20 
+      Max number of nodes to receive: 16 
+      Max number of peers to receive: 16 
+
+  <Returns>
+    A tuple containing a collection of parsed information, or in the case of 
+    GET/PUT, return the decoded message directly 
+
+  <Note>
+    This method is adapted from jech's DHT implementation at https://github.com/jech/dht
+    Note: A "cleaner" and possibly more efficient way is to use our own decoder method for all messages 
+  """
+
   buf_len = len(buf)
   sender_id = info_hash = target = token = ""
   tid = ""
@@ -154,7 +189,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
     msg_type = "REPLY"
   elif buf.find("1:y1:e") > -1:
     msg_type = "ERROR"    
-  elif buf.find("1:y1:q") == -1:
+  elif buf.find("1:y1:q") == -1:   # if message type is neither reply nor query, it's a wrong type 
     msg_type = -1 
   elif buf.find("1:q4:ping") > -1:
     msg_type = "PING"
@@ -186,6 +221,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
   else:
     tid_len = 0 
 
+  # parse id if exists 
   p = buf.find("2:id20:")
   if p > -1:
     if length_check(p+7, 20, buf_len):
@@ -194,6 +230,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
     else:
       sender_id = 0 
 
+  # parse infohash if exists 
   p = buf.find("9:info_hash20:")
   if p > -1:
     if length_check(p+14, 20, buf_len):
@@ -202,6 +239,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
     else:
       info_hash = 0 
 
+  # parse port number if exists 
   p = buf.find("porti")
   if p > -1:
     n_str = ""
@@ -211,17 +249,19 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
       q += 1 
     n = int(n_str)
     if buf[q] and buf[q] == 'e' and 0 < n < 0x10000:
-      log ("port: ", n, "\n")
+      # log ("port: ", n, "\n")
       port = n
 
+  # parse target if exists 
   p = buf.find("6:target20:")
   if p > -1:
     if length_check(p+11, 20, buf_len):
       target = buf[p+11:p+11+20]
-      log("target: ", target, "\n")
+      # log("target: ", target, "\n")
     else:
       target = 0 
 
+  # parse token if exists 
   p = buf.find("5:token")
   if p > -1:
     l_str = ""
@@ -239,6 +279,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
   else:
     token_len = 0
 
+  # parse nodes string if exists 
   p = buf.find("5:nodes")
   if p > -1:
     l_str = ""
@@ -249,19 +290,17 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
     l = int(l_str)
     if 0 < l <= nodes_len and buf[q] == ":":
       k = q+1
-      # while k < buf_len and not (buf[k] == "5" and buf[k+1] == ":"):
       while k < buf_len and k < l + (q+1):
         nodes.append(ord(buf[k]))
         k += 1 
       nodes_len = len(nodes)
-      # hex_nodes = [hex(n) for n in nodes]
       # log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
     else:
       nodes_len = 0 
   else:
     nodes_len = 0  
 
-  # parse values 
+  # parse values if exist 
   p = buf.find("6:valuesl")
   if p > -1:
     q = p+9 
@@ -295,20 +334,29 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
   return (msg_type, tid, tid_len, sender_id, info_hash, target, port, 
             token, token_len, nodes, nodes_len, values, values_len)
 
-
 def invalid_address(ip, port):
-    # log (ip, ": ", port, "\n")
+  """
+  <Purpose>
+    validate the given address (ip, port pair)
+    the address is invalid if:
+    port is 0, ip starts with 0, 127, or a number greater than 224. 
+  """
     ip_list = [int(n) for n in ip.split(".")]
     if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
       return True 
     return False  
 
 
-"""
-  The Bencode encoder and decoder functions are inspired by: 
-  Utku Demir's bencoder at https://github.com/utdemir/bencoder/
-"""
 def encoder(obj):
+  """
+  <Purpose>
+    Bencode encode method. 
+
+    Note: 
+    The Bencode encoder and decoder functions here are inspired by: 
+    Utku Demir's bencoder at https://github.com/utdemir/bencoder/
+  """
+
   if isinstance(obj, int):
     return "i" + str(obj) + "e"
   elif isinstance(obj, str):
@@ -336,7 +384,15 @@ def encoder(obj):
     raise ValueError("Allowed Bencode types: int, string, list, dict. Not: ", type(obj))
 
 def decoder(s):
+  """
+  <Purpose>
+    Bencode decode method. 
 
+    Note: 
+    The Bencode encoder and decoder functions here are inspired by: 
+    Utku Demir's bencoder at https://github.com/utdemir/bencoder/
+  """
+  
   if not isinstance(s, str):
     raise ValueError("Only string type can be decoded.")
 
