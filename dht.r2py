@@ -110,6 +110,27 @@ class DHT:
 
           elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
             lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
+            
+            if values_len > 0 and lids[0]:
+              # log ("Got %d values!\n" % (values_len/6))
+              lookup = self.lookups.find_lookup_by_tid(lids[0]) 
+              filtered_values = list()
+              i = 0 
+              while i < values_len:
+                v = values[i:i+6]
+                ip_strs = list()
+                for x in v[0:4]:
+                  ip_strs.append(str(x))
+                v_ip = ".".join(ip_strs)
+
+                v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
+                i += 6
+                filtered_values.append((v_ip, v_port))
+
+              # since we've got values, stop the lookup and return callback
+              if lookup and not lookup.done:  
+                if callback and lookup.port < 2:
+                  return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
             # try to find among existing lookups by searching lid 
             for lid in lids:
@@ -158,27 +179,6 @@ class DHT:
                     # query another alpha nodes that haven't replied 
                     self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
                 break 
-
-            if values_len > 0 and lids[0]:
-              # log ("Got %d values!\n" % (values_len/6))
-              lookup = self.lookups.find_lookup_by_tid(lids[0]) 
-              filtered_values = list()
-              i = 0 
-              while i < values_len:
-                v = values[i:i+6]
-                ip_strs = list()
-                for x in v[0:4]:
-                  ip_strs.append(str(x))
-                v_ip = ".".join(ip_strs)
-
-                v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
-                i += 6
-                filtered_values.append((v_ip, v_port))
-
-              # since we've got values, stop the lookup and return callback
-              if lookup and not lookup.done:  
-                if callback and lookup.port < 2:
-                  return self.lookups.lookup_finished(lookup, callback, values=filtered_values)
 
           elif util.tid_match(tid, "gt"):
             try: 

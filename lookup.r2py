@@ -26,7 +26,7 @@ class DHTLookup:
 
   """
     port number implications:
-
+    
     - 0 for pure lookup (GET_PEER)
     - 1 for GET 
     - 2 for PUT 
@@ -36,59 +36,36 @@ class DHTLookup:
   def dht_lookup(self, string_id, port, callback, version, my_port=63101, value=None, opts=None):
     # refresh 
     self.stable_results = 0 
-    new_lookup = True 
     target_id = util.string_to_long(string_id)
 
-    # reusing data from an old lookup  
+    self.lookup_id += 1 
+    newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY, port, value, opts)
+    oldest = None 
+    # find the oldest lookup
     for l in self.lookups:
-      if target_id == l.target_id:
-        l.done = 0 
-        new_lookup = False 
-        for n in l.get_nodes():
-          # discard dubious node 
-          if n.pinged >= 3 or n.last_replied < getruntime() - 120 * 60:
-            l.remove(n)
-        # get some new lookup nodes 
-        l = self.router.get_lookup_nodes(l, target_id)
-        l.port = port 
-        l.value = value 
-        l.opts = opts 
-        # self.lookup_step(l, callback, version)
-        if not l.lookup_done: 
-          for n in l.get_good_nodes():
-            # log ("get_peers to %s %d\n" %(n.ip, n.port))
-            self.lookup_get_peers(l, version, n, my_port)
-        break 
+      if l.done and (oldest == None or l.step_time < oldest.step_time):
+        oldest = l 
+    # if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
+    if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
+      index = self.lookups.index(oldest) 
+      self.lookups[index] = newest
+    else:
+      self.lookups.append(newest)
 
-    if new_lookup:
-      self.lookup_id += 1 
-      newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY, port, value, opts)
-      oldest = None 
-      # find the oldest lookup
-      for l in self.lookups:
-        if l.done and (oldest == None or l.step_time < oldest.step_time):
-          oldest = l 
-      # if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
-      if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
-        index = self.lookups.index(oldest) 
-        self.lookups[index] = newest
-      else:
-        self.lookups.append(newest)
-
-      newest = self.router.get_lookup_nodes(newest, target_id)
-      # newest.port = port 
-      # log ("new ")
-      self.lookup_step(newest, callback, version, my_port)
-      # log (newest.get_all_ids(), "\n")
+    newest = self.router.get_lookup_nodes(newest, target_id)
+    self.lookup_step(newest, callback, version, my_port)
     # update lookup_time 
     self.lookup_time = getruntime()
 
   def lookup_step(self, lookup, callback, version, my_port=63101, alpha=14, finished=0):
-    # log ("ALPHA: ", alpha, "\n")
+
+    if lookup.done:
+      return self.lookup_finished(lookup, callback)
+
     # see if we have got reply from k (8) live nodes 
     all_replied = lookup.all_replied()
     # if we have k live nodes or as many as we can get 
-    if (all_replied or finished) and not lookup.done:
+    if all_replied or finished:
       lookup.lookup_done = 1 
       # finished for pure lookup 
       # log ("Lookup Port: %d\n" % lookup.port)
@@ -127,6 +104,11 @@ class DHTLookup:
       return 
     
     # if not all replied 
+    # ignore too frequent lookups 
+    # if lookup.step_time > getruntime() - 0.1:
+    #   log ("TOO FREQUENT\n")
+    #   return 
+
     # send alpha get_peers / get requests to nodes we have NOT queried 
     send_count = 0       
     if lookup.port == 1 or lookup.port == 2:
@@ -147,16 +129,21 @@ class DHTLookup:
   def lookup_finished(self, lookup, callback, values=None, res=None):
     lookup.done = 1 
     lookup.step_time = getruntime()
+
     if callback:
       event = -1 
       if values:
+        # # we do not want to find values during setup
+        if lookup.port == 0 and lookup.id == self.id:
+          lookup.done = 0 
+          return 
         if lookup.port == 1:
           return callback(DHT_EVENT_VALUE_ITEM, lookup.id, values, 0, res)
         else:
           return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
       elif lookup.port > 2:
         acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
-        return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes))  
+        return callback(DHT_EVENT_ANNOUNCE_DONE, lookup.id, acked_nodes, len(acked_nodes))  
       elif lookup.port == 2:
         acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
         return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes)) 
