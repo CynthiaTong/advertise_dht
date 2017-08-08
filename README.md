@@ -3,6 +3,8 @@
   
 ## Problems
 
+  - SHA512 in ed25519 
+  
   
 ## To-dos 
 
