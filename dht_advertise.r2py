@@ -9,7 +9,34 @@ log (getruntime(), "\n")
 
 # peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
 peers = peerfile.import_peers("peers.txt")
-# peers = [(getmyip(), 63104, "a"), (getmyip(), 63106, "b"), (getmyip(), 63108, "c")]
+
+def random_ids_file(filename, n):
+  file = openfile(filename, True)
+  v = file.readat(20, 0)
+  values = list()
+
+  if v == "":
+    for i in range(n):
+      random_id = util.random_id()
+      file.writeat(random_id, i*20)
+      values.append(random_id)
+    file.close()
+    return values  
+  else:
+    for i in range(n):
+      values.append(file.readat(20, i*20))
+    file.close()
+    return values  
+
+ids = random_ids_file("random_ids.txt", 10)
+
+peers = list()
+n = 63101 
+i = 0 
+while n < 63120:
+  peers.append((getmyip(), n+1, ids[i]))
+  n += 2 
+  i += 1 
 # log (peers)
 
 my_ip = getmyip()
@@ -81,6 +108,7 @@ def callback(event, id, data, data_len=0, res=None):
     output += "Response: \n" + str(res) + "\n"
     output += "-------------------------\n"
     log (output)
+  # log (mycontext["dht"].router)
 
 def dhtadvertise_setup(my_id, callback, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
   try: 
@@ -106,7 +134,7 @@ def dhtadvertise_setup(my_id, callback, my_version=None, my_port=MY_PORT, setup_
     raise Exception("Failed to initialize DHT. " + str(e) + "\n")
 
   sleep(0.1)
-
+  # log (mycontext["dht"].router.get_all_nodes(), "\n")
   mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version, setup_port)    # lookup my_id 
 
   # call periodic 
@@ -143,7 +171,10 @@ def setup_listen(port, callback=callback):
     peers = [ n.ip + "," + str(n.port) + "," + n.id + "\n" for n in contacts]
     # log (peers)
     num = peerfile.export_peers(peers, "peers.txt")
-    log ("Saved %d peers to peerfile.\n" % num)
+    if num > 0:
+      log ("Saved %d peers to peerfile.\n" % num)
+    else:
+      log ("No peers to save.\n")
 
     if not mycontext["setup"]:
       raise DHTNoResponseError("DHT Timeout: Did not receive enough replies for Node setup.")
@@ -153,6 +184,7 @@ def setup_listen(port, callback=callback):
 
 def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT):
   def listen():
+
     mycontext["lock"].acquire(True)
     starttime = getruntime()
 
@@ -172,7 +204,7 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
 
     udpresponsesocket.close()
     mycontext["lock"].release()
-    
+
     if not mycontext[operation_type]:
       if operation_type == "announce":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform announce_peer.")
@@ -265,7 +297,8 @@ def dhtadvertise_put(my_id, value, callback, my_port=MY_PORT, setup_port=SETUP_P
       createthread(listen)
 
       # 2 for put lookup
-      return mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      break 
 
   # BELOW CODE: for testing only !!!
 
@@ -289,7 +322,7 @@ def dhtadvertise_get(my_id, key, callback, my_port=MY_PORT, setup_port=SETUP_POR
   while True:
     if mycontext["setup"]:
       listen = call_listen("get", my_port=my_port)
-      createthread(listen, setup_port=setup_port)
+      createthread(listen)
 
       # 1 for get lookup
       return mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None, my_port=my_port)
@@ -330,9 +363,9 @@ def dhtadvertise_ping(ip, port):
 # random module for testing only 
 random = dy_import_module("random.r2py")
 rand = random.random_randombytes(20)
-id = id_from_file("example.id")
-
+# id = id_from_file("example.id")
 # UDP Port range: 63100, 63201
+# log (ids, "\n")
 
 if callfunc == "initialize":
   # port, setup port 
@@ -340,13 +373,22 @@ if callfunc == "initialize":
     my_p = int(callargs[0])
     setup_p = int(callargs[1])
     log (my_p, " ", setup_p, "\n")
-    # dhtadvertise_setup(id, callback, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
-    # dhtadvertise_lookup(id, rand, callback, "AD\0\0", my_p, setup_p)
-    dhtadvertise_announce_once(id, rand, callback, port=5000, version="AD\0\0", my_port=my_p, setup_port=setup_p)
+    index = (my_p - 63101) / 2 
+    # dhtadvertise_setup(ids[index], callback, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
+    # dhtadvertise_lookup(ids[index], rand, callback, "AD\0\0", my_p, setup_p)
+    # dhtadvertise_announce_once(ids[index], rand, callback, port=5000, version="AD\0\0", my_port=my_p, setup_port=setup_p)
     
-    # mycontext["dht"] = dht_module.DHT(rand, "AD\0\0")
-    # dhtadvertise_put(id, {"a": [0, 1]}, callback, my_p)
+    # mycontext["dht"] = dht_module.DHT(ids[index], "AD\0\0")
+    # listen = setup_listen(setup_p)
+    # createthread(listen)
+
+    key = dhtadvertise_put(rand, {"a": [0, 1]}, callback, my_p)
+
+    while True: 
+      if mycontext["put"]:
+        log (key, "\n")
+        dhtadvertise_get(ids[index], key, callback)
+        break 
 
   else:
     raise ValueError("must call dht_advertise.r2py with port arguments.")
-    

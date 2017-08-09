@@ -34,7 +34,6 @@ class DHTLookup:
   
   """
   def dht_lookup(self, string_id, port, callback, version, my_port=63101, value=None, opts=None):
-    # refresh 
     self.stable_results = 0 
     target_id = util.string_to_long(string_id)
 
@@ -67,9 +66,8 @@ class DHTLookup:
     # if we have k live nodes or as many as we can get 
     if all_replied or finished:
       lookup.lookup_done = 1 
-      # finished for pure lookup 
       # log ("Lookup Port: %d\n" % lookup.port)
-      # if lookup is for get_peer or get 
+      # if lookup is for get_peer or get, we're finished 
       if lookup.port < 2:
         self.lookup_finished(lookup, callback)
       else: 
@@ -87,7 +85,7 @@ class DHTLookup:
             else: # lookup is for put 
               log ("Sending put to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("pt", lookup.tid)
-              rpc.put(self.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
+              rpc.put(lookup.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
 
             n.pinged += 1 
             n.last_req = getruntime()
@@ -102,29 +100,25 @@ class DHTLookup:
 
       lookup.step_time = getruntime()
       return 
-    
-    # if not all replied 
-    # ignore too frequent lookups 
-    # if lookup.step_time > getruntime() - 0.1:
-    #   log ("TOO FREQUENT\n")
-    #   return 
-
-    # send alpha get_peers / get requests to nodes we have NOT queried 
-    send_count = 0       
-    if lookup.port == 1 or lookup.port == 2:
-        for n in lookup.get_nodes():
-          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-            send_count += self.lookup_get(lookup, n, my_port)
-          if send_count >= alpha:
-            break
     else:
-      for n in lookup.get_nodes():
-          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-            send_count += self.lookup_get_peers(lookup, version, n, my_port)
-          if send_count >= alpha:
-            break
+      # if not all replied 
+      # send alpha get_peers / get requests to nodes we have NOT queried 
+      send_count = 0       
+      if lookup.port == 1 or lookup.port == 2:
+          for n in lookup.get_nodes():
+            if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
+              log ("Sending get to %s: %d\n" %(n.ip, n.port))
+              send_count += self.lookup_get(lookup, n, my_port)
+            if send_count >= alpha:
+              break
+      else:
+        for n in lookup.get_nodes():
+            if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
+              send_count += self.lookup_get_peers(lookup, version, n, my_port)
+            if send_count >= alpha:
+              break
 
-    lookup.step_time = getruntime()
+      lookup.step_time = getruntime()
 
   def lookup_finished(self, lookup, callback, values=None, res=None):
     lookup.done = 1 
@@ -159,6 +153,8 @@ class DHTLookup:
 
 
   def lookup_get_peers(self, lookup, version, node, my_port):
+    if lookup.done:
+      return 0 
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
       return 0 
     # log ("Sending get_peers to %s %d\n" %(node.ip, node.port))
@@ -173,9 +169,10 @@ class DHTLookup:
     return 1 
 
   def lookup_get(self, lookup, node, my_port):
+    if lookup.done:
+      return 0 
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
-        return 0 
-    log ("Sending get.\n")
+      return 0 
     tid = util.make_tid("gt", lookup.tid)
     rpc.get(self.id, lookup.id, node.ip, node.port, tid, my_port)
     node.pinged += 1 
@@ -235,6 +232,7 @@ class Lookup:
       comparison = util.compare_distance(self.target_id, lookup_node.long_id, n.long_id)
       if comparison == 0:
         # found 
+        # log ("found! %d at index %d \n" % (port, i))
         if replied:
           n.replied = 1 
           n.last_replied = getruntime()
@@ -296,7 +294,7 @@ class Lookup:
               (self.target_id, self.tid, self.port, self.step_time, self.done, self.lookup_done))
     output += "lookup nodes (%d): \n" % len(self.list)
     for l in self.list:
-      output += l.ip + "\t" + str(l.replied) + "\n"
+      output += l.ip + ": " + str(l.port) + "\t" + str(l.replied) + "\n"
     return output 
 
   def print_good_nodes(self):
@@ -305,7 +303,7 @@ class Lookup:
     output += "good lookup nodes: \n"
     for l in self.list:
       if l.replied:
-        output += l.ip + "\t" + str(l.replied) + "\n"
+        output += l.ip + ": " + str(l.port) + "\t" + str(l.replied) + "\n"
     log(output)
 
   def get_good_nodes(self):

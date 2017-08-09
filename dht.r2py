@@ -52,7 +52,7 @@ class DHT:
           if verified:
             sender_id = msg["a"]["id"]
             stored = self.storage.store_value(sender_id, msg)
-            # log (self.storage.retrieve_value(sender_id), "\n")
+            log (self.storage)
             if stored: 
               return rpc.send_put(self.id, source_ip, source_port, msg["t"], my_port)
             else: 
@@ -68,6 +68,7 @@ class DHT:
             target_id_long = util.string_to_long(target)
             tid = msg["t"]
             value_obj = self.storage.retrieve_value(target)
+            log (value_obj, "\n")
             nodes_str = "".join(self.router.get_closest_good_nodes(target_id_long))
             token = util.make_token(source_ip, self.secret_package[1])
 
@@ -91,6 +92,8 @@ class DHT:
         values_len = int(values_len)
         token_len= int(token_len)
 
+        # log ("%d  %s: %d\n" %(util.string_to_long(sender_id), source_ip, source_port))
+
         if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
           log ("Faulty message - unparseable: \n", buf, "\n")
           return self.periodic(my_port, callback)
@@ -110,7 +113,6 @@ class DHT:
 
           elif util.tid_match(tid, "gp") or util.tid_match(tid, "fn"):
             lids = (util.tid_match(tid, "gp") , util.tid_match(tid, "fn"))
-            
             if values_len > 0 and lids[0]:
               # log ("Got %d values!\n" % (values_len/6))
               lookup = self.lookups.find_lookup_by_tid(lids[0]) 
@@ -162,9 +164,8 @@ class DHT:
                       ip_strs.append(str(x))
                     n_ip = ".".join(ip_strs)
 
-                    n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
+                    n_port = util.string_to_long("".join([chr(x) for x in n[24:]]))
                     i += 26 
-                    # log (n_ip, ": ", n_port, "\n")
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
@@ -178,6 +179,7 @@ class DHT:
                     lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                     # query another alpha nodes that haven't replied 
                     self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
+                  # log ("--------- LOOKUP ---------\n", str(lookup))
                 break 
 
           elif util.tid_match(tid, "gt"):
@@ -208,7 +210,7 @@ class DHT:
                 if len(values) > 0:
                   return self.lookups.lookup_finished(lookup, callback, values=values, res=res["r"])
 
-                if not lookup.lookup_done:
+                if not (lookup.lookup_done or lookup.done):
                   # log ("Got %d nodes for tid: %s\n" % (len(nodes)/26, tid))
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
 
@@ -221,7 +223,6 @@ class DHT:
                     n_ip = ".".join([str(ord(x)) for x in n[20:24]])
                     n_port = util.string_to_long(n[24:])  # convert port bytes back to an integer
                     i += 26 
-                    # log (n_ip, ": ", n_port, "\n")
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 

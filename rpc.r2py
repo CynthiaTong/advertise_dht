@@ -8,9 +8,12 @@ LARGE_BUF_SIZE = 2048
 
 
 def send(buf, target_ip, target_port, my_port=63101):
-  # log ("Sending msg to %s : %d\n" % (target_ip, target_port))
+  # log ("My port: %s \t Sending msg to %s : %d\n" % (my_port, target_ip, target_port))
   ip = getmyip()
-  bytes = sendmessage(target_ip, target_port, buf, ip, my_port)
+  # avoid sending messages to self (will result in exception)
+  if ip == target_ip and my_port == target_port:
+    return 0 
+  bytes = sendmessage(target_ip, int(target_port), buf, ip, int(my_port))
   if bytes == len(buf):
     return 1 
   else:
@@ -18,7 +21,7 @@ def send(buf, target_ip, target_port, my_port=63101):
 
 def add_version(version):
   if version:
-    return "1:v4:" + version + "1:y1:qe"
+    return "1:v4:" + str(version) + "1:y1:qe"
   else:
     return "1:y1:qe"
 
@@ -171,7 +174,6 @@ def put(self_id, value, ip, port, tid, token, my_port=63101, opts=None):
       msg["a"]["cas"] = opts["cas"]
 
   msg = util.encoder(msg)
-  # log (msg, "\n")
   return send(msg, ip, port, my_port)
 
 
@@ -193,16 +195,16 @@ def get(self_id, target_id, ip, port, tid, my_port=63101):
     "y": "q",
     "q": "get"
   }
-
   return send(util.encoder(msg), ip, port, my_port)
 
+# Note: value_obj is always a dictionary 
 def send_get(self_id, ip, port, value_obj, nodes_str, tid, token, my_port=63101):
 
   msg = {
     "r": {
       "id": self_id,
       "token": token,
-      "v": "",  # placeholder 
+      "v": "",    # placeholder 
       "nodes": nodes_str
     },
     "t": tid,
