@@ -15,7 +15,7 @@ class DHT:
 
   def __init__(self, dht_id, version_id):
     self.id = dht_id
-    self.long_id = util.string_to_long(self.id)
+    self.long_id = util.bytes_to_int(self.id)
     self.version_id = version_id 
 
     self.router = routing.RoutingTable(self.id, K_SIZE, version_id) 
@@ -65,7 +65,7 @@ class DHT:
             sender_id = msg["a"]["id"]
             self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
             target = msg["a"]["target"]
-            target_id_long = util.string_to_long(target)
+            target_id_long = util.bytes_to_int(target)
             tid = msg["t"]
             value_obj = self.storage.retrieve_value(target)
             log (value_obj, "\n")
@@ -92,9 +92,9 @@ class DHT:
         values_len = int(values_len)
         token_len= int(token_len)
 
-        # log ("%d  %s: %d\n" %(util.string_to_long(sender_id), source_ip, source_port))
+        # log ("%d  %s: %d\n" %(util.bytes_to_int(sender_id), source_ip, source_port))
 
-        if msg_type == "ERROR" or util.string_to_long(sender_id) == 0:
+        if msg_type == "ERROR" or util.bytes_to_int(sender_id) == 0:
           log ("Faulty message - unparseable: \n", buf, "\n")
           return self.periodic(my_port, callback)
 
@@ -120,11 +120,7 @@ class DHT:
               i = 0 
               while i < values_len:
                 v = values[i:i+6]
-                ip_strs = list()
-                for x in v[0:4]:
-                  ip_strs.append(str(x))
-                v_ip = ".".join(ip_strs)
-
+                v_ip = ".".join([str(ord(x)) for x in v[:4]])
                 v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
                 i += 6
                 filtered_values.append((v_ip, v_port))
@@ -155,16 +151,9 @@ class DHT:
                   while i <= len(nodes) - 26:
                     n = nodes[i:i+26]
                     # convert id, ip and port to host order and readable format 
-                    n_id = ""
-                    for x in n[:20]:
-                      n_id += chr(int(x))
-
-                    ip_strs = list()
-                    for x in n[20:24]:
-                      ip_strs.append(str(x))
-                    n_ip = ".".join(ip_strs)
-
-                    n_port = util.string_to_long("".join([chr(x) for x in n[24:]]))
+                    n_id = n[:20]
+                    n_ip = ".".join([str(ord(x)) for x in n[20:24]])
+                    n_port = util.bytes_to_int(n[24:])
                     i += 26 
                     if n_id == self.id:
                       continue;
@@ -221,7 +210,7 @@ class DHT:
                     # convert id, ip and port to host order and readable format 
                     n_id = n[:20]
                     n_ip = ".".join([str(ord(x)) for x in n[20:24]])
-                    n_port = util.string_to_long(n[24:])  # convert port bytes back to an integer
+                    n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
                     i += 26 
                     if n_id == self.id:
                       continue;
@@ -286,7 +275,7 @@ class DHT:
         elif msg_type == "GET_PEERS":
           log ("Get peers!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-          if util.string_to_long(info_hash) == 0:
+          if util.bytes_to_int(info_hash) == 0:
             log ("Got get_peers with no info_hash\n")
             rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", my_port, self.version_id)
           else:
@@ -303,7 +292,7 @@ class DHT:
         elif msg_type == "ANNOUNCE_PEER":
           log ("Announce peer!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
-          if util.string_to_long(info_hash) == 0:
+          if util.bytes_to_int(info_hash) == 0:
             log ("Got announce_peer with no info_hash\n")
             rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash", my_port, self.version_id)   
           if port == 0:

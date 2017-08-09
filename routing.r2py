@@ -7,7 +7,7 @@ random = dy_import_module("random.r2py")
 class RoutingTable:
   def __init__(self, string_id, ksize, version_id=None):
     self.id = string_id
-    self.long_id = util.string_to_long(string_id)
+    self.long_id = util.bytes_to_int(string_id)
     self.version_id = version_id
     self.ksize = ksize 
     self.expire_stuff_time = 0  
@@ -194,7 +194,7 @@ class RoutingTable:
       if node.id == i_id:
         return nodes_list 
       # if node is closer to target than nodes_list[i]
-      if util.compare_distance(target_id, node.long_id, util.string_to_long(i_id)) < 0:
+      if util.compare_distance(target_id, node.long_id, util.bytes_to_int(i_id)) < 0:
         break 
       i += 1 
     # if list is full, return 
@@ -204,7 +204,7 @@ class RoutingTable:
     # Note: both ip & port needs to be "compact" and in network byte order 
     packed_ip = util.ip_as_bytes(node.ip)
     # convert port to network order 
-    network_order_port = str(util.htons(node.port)) 
+    network_order_port = str(util.int_to_bytes(node.port)) 
     nodes_list.insert(i, node.id + packed_ip + network_order_port)
     # only return k closest nodes 
     while len(nodes_list) > self.ksize:

@@ -85,7 +85,7 @@ def pong(self_id, ip, port, tid, tid_len, my_port=63101, v=None):
 
 def send_closest_nodes(router, self_id, ip, port, tid, tid_len, target_id_str, 
                         token=None, token_len=0, peers_list=None, my_port=63101, v=None):
-  target_id_long = util.string_to_long(target_id_str)
+  target_id_long = util.bytes_to_int(target_id_str)
   nodes_list = router.get_closest_good_nodes(target_id_long)
   nodes_str = "".join(nodes_list)
   nodes_len = len(nodes_list) * 26 

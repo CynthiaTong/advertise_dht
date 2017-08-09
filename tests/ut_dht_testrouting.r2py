@@ -65,10 +65,10 @@ def test_get_closest_good_nodes():
   assert len(n_list) <= router.ksize, "number of closest nodes exceeds k."
   ids = [n[:20] for n in n_list]
   for i in range(len(ids) - 1):
-    assert util.string_to_long(ids[i]) <= util.string_to_long(ids[i + 1]), "closest nodes are not sorted."
+    assert util.bytes_to_int(ids[i]) <= util.bytes_to_int(ids[i + 1]), "closest nodes are not sorted."
   for n in router.get_all_nodes():
     if n.id not in ids:
-      assert util.string_to_long(ids[-1]) <= n.long_id, "fails to get all closest nodes."
+      assert util.bytes_to_int(ids[-1]) <= n.long_id, "fails to get all closest nodes."
 
 
 if callfunc == "initialize":

@@ -48,9 +48,9 @@ if callfunc == "initialize":
       while True: 
         if dhtadvertise.mycontext["get"]:
           assert dhtadvertise.mycontext["cb"]["data"] == data_item, "False data item returned by get."
-          break 
+          exitall()
     else:
-      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
+      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
 
   else:
     raise ValueError("must call this program with port arguments.")

@@ -19,8 +19,8 @@ def make_tid(prefix, sequence):
   output = ""
   for n in prefix:
     output += chr(ord(n) & 0xFF) 
-  binary_seq = "{0:b}".format(sequence)[:16]  # get the first 16 bits (2 bytes) of the integer 
-  output += htons(int(binary_seq, 2))   # convert to network byte order 
+  # binary_seq = "{0:b}".format(sequence)[:16]  # get the first 16 bits (2 bytes) of the integer 
+  output += int_to_bytes(sequence)   
   # output += str(sequence)[:2]
   return output 
 
@@ -93,21 +93,6 @@ def ip_as_bytes(ip):
   ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
   return ip_as_bytes
 
-# convert a string of bytes into a long number
-def string_to_long(data):
-  num = 0L
-  offset = 0
-  for char in data:
-    num |= ord(char) << offset * 8
-    offset += 1
-  return num
-
-# convert a number from host to network byte order 
-def htons(num):
-  n = ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
-  return int_to_bytes(n)
-
-
 def int_to_bytes(long_int):
   """
   <Purpose>
@@ -147,7 +132,7 @@ def bytes_to_int(bytes):
   n = 0
   # read from bytes and add to n 
   for b in bytes:
-    n = n * 256 + int(b)
+    n = n * 256 + ord(b)
   return n
 
 # check if string length exceeds a certain max. 
@@ -179,8 +164,8 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
   buf_len = len(buf)
   sender_id = info_hash = target = token = ""
   tid = ""
-  nodes = list()
-  values = list()
+  nodes = ""
+  values = ""
   port = 0 
 
   msg_type = -1 
@@ -291,7 +276,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
     if 0 < l <= nodes_len and buf[q] == ":":
       k = q+1
       while k < buf_len and k < l + (q+1):
-        nodes.append(ord(buf[k]))
+        nodes += buf[k]
         k += 1 
       nodes_len = len(nodes)
       # log ("nodes(nodes_len): ", nodes, " (", nodes_len, ") \n")
@@ -316,7 +301,7 @@ def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6
         if l == 6:
           k = q+1
           while not ((buf[k] == "6" and buf[k+1] == ":") or buf[k] == "e"):
-            values.append(ord(buf[k]))
+            values += buf[k]
             k += 1 
           q = k
         else:

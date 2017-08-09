@@ -35,7 +35,7 @@ class DHTLookup:
   """
   def dht_lookup(self, string_id, port, callback, version, my_port=63101, value=None, opts=None):
     self.stable_results = 0 
-    target_id = util.string_to_long(string_id)
+    target_id = util.bytes_to_int(string_id)
 
     self.lookup_id += 1 
     newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY, port, value, opts)
@@ -184,7 +184,7 @@ class DHTLookup:
 
   def find_lookup_by_tid(self, tid):
     for l in self.lookups:
-      if l.tid == util.string_to_long(tid):
+      if l.tid == util.bytes_to_int(tid):
         return l 
     return None 
 
@@ -200,7 +200,7 @@ class Lookup:
 
   def __init__(self, string_id, tid, capacity, port=0, value=None, opts=None):
     self.id = string_id
-    self.target_id = util.string_to_long(self.id)
+    self.target_id = util.bytes_to_int(self.id)
     self.capacity = capacity
     self.tid = tid 
     self.port = port  # 0 for pure searches 
@@ -316,7 +316,7 @@ class Lookup:
 class Lookup_Node():
   def __init__(self, id, ip, port, replied, token, token_len):
     self.id = id 
-    self.long_id = util.string_to_long(self.id)
+    self.long_id = util.bytes_to_int(self.id)
     self.ip = ip 
     self.port = port 
     self.replied = replied 

@@ -17,7 +17,7 @@ def test_init():
 def test_node_id():
   n = node.Node(random_id, "127.0.0.1", 3000)
   assert len(n.id) == 20, "Error: node id is not 20 bytes."
-  assert n.long_id == util.string_to_long(n.id), "Error: wrong node long_id."
+  assert n.long_id == util.bytes_to_int(n.id), "Error: wrong node long_id."
   
 def test_node_dist():
   n1 = node.Node(random_id, "111.222.33.4", 5000)
