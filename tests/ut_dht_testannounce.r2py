@@ -18,8 +18,8 @@ if callfunc == "initialize":
     if dhtadvertise.mycontext["announce"]:
 
       resp = dhtadvertise.mycontext["cb"]
-      assert resp[0] == 2, "Lookup event should be 'DHT_EVENT_ANNOUNCE_DONE' (2)."
-      assert rand == resp[1], "Wrong lookup id."
+      assert resp["event"] == 2, "Lookup event should be 'DHT_EVENT_ANNOUNCE_DONE' (2)."
+      assert rand == resp["id"], "Wrong lookup id."
 
       sleep(0.1)
       dhtadvertise.dhtadvertise_lookup(my_id, rand, dhtadvertise.callback)
@@ -30,11 +30,11 @@ if callfunc == "initialize":
 
       resp = dhtadvertise.mycontext["cb"]
 
-      assert resp[0] == 3, "Lookup event should be 'DHT_EVENT_VALUES' (3)."
-      assert rand == resp[1], "Wrong lookup id."
+      assert resp["event"] == 3, "Lookup event should be 'DHT_EVENT_VALUES' (3)."
+      assert rand == resp["id"], "Wrong lookup id."
 
       found = False 
-      for v in resp[2]:
+      for v in resp["data"]:
         # no way to get our public ip easily, so for now just check port number
         if v[1] == 3000:
           found = True 

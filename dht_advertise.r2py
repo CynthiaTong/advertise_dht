@@ -1,4 +1,4 @@
-log (getruntime(), "\n")
+# log (getruntime(), "\n")
 dht_module = dy_import_module("dht.r2py")
 rpc = dy_import_module("rpc.r2py")
 util = dy_import_module("util.r2py")
@@ -9,35 +9,6 @@ log (getruntime(), "\n")
 
 # peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
 peers = peerfile.import_peers("peers.txt")
-
-def random_ids_file(filename, n):
-  file = openfile(filename, True)
-  v = file.readat(20, 0)
-  values = list()
-
-  if v == "":
-    for i in range(n):
-      random_id = util.random_id()
-      file.writeat(random_id, i*20)
-      values.append(random_id)
-    file.close()
-    return values  
-  else:
-    for i in range(n):
-      values.append(file.readat(20, i*20))
-    file.close()
-    return values  
-
-ids = random_ids_file("random_ids.txt", 10)
-
-peers = list()
-n = 63101 
-i = 0 
-while n < 63120:
-  peers.append((getmyip(), n+1, ids[i]))
-  n += 2 
-  i += 1 
-# log (peers)
 
 my_ip = getmyip()
 MY_PORT = 63101
@@ -67,7 +38,8 @@ class DHTAdvertiseError(Exception):
 
 
 def callback(event, id, data, data_len=0, res=None):
-  mycontext["cb"] = (event, id, data, data_len, res)
+  mycontext["cb"] = {"event": event, "id":id, "data":data, "data length": data_len, "response": res}
+  # log (mycontext["cb"], "\n")
 
   output = "=========================\nRuntime: %s\n" % getruntime()
   if event == DHT_EVENT_SETUP_DONE:
@@ -92,7 +64,13 @@ def callback(event, id, data, data_len=0, res=None):
     output += "Received value item. ID: %s\n" % id 
     mycontext["get"] = True 
 
-  if data_len > 0:
+  # if we got values for get_peers / get 
+  if event == DHT_EVENT_VALUES or event == DHT_EVENT_VALUE_ITEM:
+    output += "Data: \n" + str(data) + "\n"
+    output += "Response: \n" + str(res) + "\n"
+    output += "-------------------------\n"
+    log (output)
+  else:
     output += "Nodes (%d): \n" % data_len
     for d in data:
       if isinstance(d, tuple):
@@ -102,15 +80,10 @@ def callback(event, id, data, data_len=0, res=None):
 
     output += "-------------------------\n"
     log (output)
-  # else we got a data item from get 
-  else:
-    output += "Data: \n" + str(data) + "\n"
-    output += "Response: \n" + str(res) + "\n"
-    output += "-------------------------\n"
-    log (output)
+   
   # log (mycontext["dht"].router)
 
-def dhtadvertise_setup(my_id, callback, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_setup(my_id, callback, peers=peers, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
   try: 
     mycontext["dht"] = dht_module.DHT(my_id, my_version)
     listen = setup_listen(setup_port, callback)
@@ -218,7 +191,7 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
   return listen 
 
 
-def dhtadvertise_lookup(my_id, target_id, callback, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_lookup(my_id, target_id, callback, peers=peers, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
 
   target_id = str(target_id)
   if version:
@@ -238,7 +211,7 @@ def dhtadvertise_lookup(my_id, target_id, callback, version=None, my_port=MY_POR
   Announce that the peer, controlling the querying node, is downloading a torrent on a port
   If port is not specified, automatically use the source port of the UDP packets 
 """
-def dhtadvertise_announce_once(my_id, target_id, callback, port=MY_PORT, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+def dhtadvertise_announce_once(my_id, target_id, callback, peers=peers, port=MY_PORT, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
 
   if version:
     version = str(version) 
@@ -258,7 +231,7 @@ def dhtadvertise_announce_once(my_id, target_id, callback, port=MY_PORT, version
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, my_port=MY_PORT, setup_port=SETUP_PORT, **opts): 
+def dhtadvertise_put(my_id, value, callback, peers=peers, my_port=MY_PORT, setup_port=SETUP_PORT, **opts): 
   if not value:
     raise ValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
@@ -300,19 +273,10 @@ def dhtadvertise_put(my_id, value, callback, my_port=MY_PORT, setup_port=SETUP_P
       mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
       break 
 
-  # BELOW CODE: for testing only !!!
-
-  # listen = call_listen("put", my_port=my_port)
-  # createthread(listen)
-
-  # for p in peers:
-  #   tid = util.make_tid("pt", util.make_lid())
-  #   token = util.make_token(getmyip(), mycontext["dht"].secret_package[1])
-  #   rpc.put(my_id, value, p[0], int(p[1]), tid, token, my_port)
-
   return key  # return key for future lookup 
 
-def dhtadvertise_get(my_id, key, callback, my_port=MY_PORT, setup_port=SETUP_PORT): 
+
+def dhtadvertise_get(my_id, key, callback, peers=peers, my_port=MY_PORT, setup_port=SETUP_PORT): 
   if not (isinstance(key, str) and len(key) == 20):
     raise ValueError("DHT get: key must be a 20-byte string.")
 
@@ -326,14 +290,6 @@ def dhtadvertise_get(my_id, key, callback, my_port=MY_PORT, setup_port=SETUP_POR
 
       # 1 for get lookup
       return mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None, my_port=my_port)
-
-  # BELOW CODE: for testing only !!!
-  # listen = call_listen("get", my_port=my_port)
-  # createthread(listen)
-
-  # for p in peers:
-  #   tid = util.make_tid("gt", util.make_lid())
-  #   rpc.get(my_id, id, p[0], int(p[1]), tid, setup_port)
 
 
 # if the values we're looking for exist in local storage 
@@ -355,40 +311,24 @@ def id_from_file(filename):
     file.close()
     return value 
 
+def random_ids_file(filename, n):
+  file = openfile(filename, True)
+  v = file.readat(20, 0)
+  values = list()
+
+  if v == "":
+    for i in range(n):
+      random_id = util.random_id()
+      file.writeat(random_id, i*20)
+      values.append(random_id)
+    file.close()
+    return values  
+  else:
+    for i in range(n):
+      values.append(file.readat(20, i*20))
+    file.close()
+    return values  
+
 # expose the ping method to advertise users 
 def dhtadvertise_ping(ip, port):
   dht.ping_node(ip, port)
-
-
-# random module for testing only 
-random = dy_import_module("random.r2py")
-rand = random.random_randombytes(20)
-# id = id_from_file("example.id")
-# UDP Port range: 63100, 63201
-# log (ids, "\n")
-
-if callfunc == "initialize":
-  # port, setup port 
-  if len(callargs) == 2:
-    my_p = int(callargs[0])
-    setup_p = int(callargs[1])
-    log (my_p, " ", setup_p, "\n")
-    index = (my_p - 63101) / 2 
-    # dhtadvertise_setup(ids[index], callback, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
-    # dhtadvertise_lookup(ids[index], rand, callback, "AD\0\0", my_p, setup_p)
-    # dhtadvertise_announce_once(ids[index], rand, callback, port=5000, version="AD\0\0", my_port=my_p, setup_port=setup_p)
-    
-    # mycontext["dht"] = dht_module.DHT(ids[index], "AD\0\0")
-    # listen = setup_listen(setup_p)
-    # createthread(listen)
-
-    key = dhtadvertise_put(rand, {"a": [0, 1]}, callback, my_p)
-
-    while True: 
-      if mycontext["put"]:
-        log (key, "\n")
-        dhtadvertise_get(ids[index], key, callback)
-        break 
-
-  else:
-    raise ValueError("must call dht_advertise.r2py with port arguments.")
