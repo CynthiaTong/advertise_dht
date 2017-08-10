@@ -1,20 +1,27 @@
 ed = dy_import_module("ed25519.r2py")
 sha = dy_import_module("sha.r2py")
 
+PRIVATE_KEY_SIZE = 64
+PUBLIC_KEY_SIZE = 32
+ID_KEY_SIZE = 20
+
 class Keypair:
-  def __init__(self, seq=0, cas=-1, salt=None):
-    self.privatekey, self.publickey = ed.create_keypair()
+  def __init__(self, private_key=None, public_key=None, id_key=None, seq=0, cas=-1, salt=None):
+    self.privatekey, self.publickey = ed.create_keypair(private_key, public_key)
     self.seq = seq 
     self.cas = cas 
     self.salt = salt
-    self.create_key()
+    self.create_key(id_key)
 
-  # id is the sha-1 hash of publickey (plus salt if it is present)
-  def create_key(self):
-    if self.salt:
-      self.key = sha.sha_hash(self.publickey.vk_s + self.salt)
+  # key(id) is the sha-1 hash of publickey (plus salt if it is present)
+  def create_key(self, id_key):
+    if id_key is None:
+      if self.salt:
+        self.key = sha.sha_hash(self.publickey.vk_s + self.salt)
+      else:
+        self.key = sha.sha_hash(self.publickey.vk_s)
     else:
-      self.key = sha.sha_hash(self.publickey.vk_s)
+      self.key = id_key 
 
   def sign(self, value):
     return self.privatekey.sign(value)
@@ -48,3 +55,22 @@ class Keypair:
     return output 
 
   # keypair file io 
+  def export_keypair(self, filename):
+    file = openfile(filename, True)
+
+    file.writeat(self.privatekey.sk_s, 0)
+    file.writeat(self.publickey.vk_s, PRIVATE_KEY_SIZE)
+    file.writeat(self.key, PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE)
+
+    file.close()
+
+
+def import_keypair(filename, seq=0, cas=-1, salt=None):
+  file = openfile(filename, False)
+
+  content = file.readat(PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE + ID_KEY_SIZE, 0)
+  sk = content[:PRIVATE_KEY_SIZE]
+  vk = content[PRIVATE_KEY_SIZE: PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE]
+  id = content[PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE:]
+
+  return Keypair(sk, vk, id, seq, cas, salt)

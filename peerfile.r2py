@@ -3,8 +3,7 @@ MAXPEERS = 200
 
 def import_peers(filename):
   peerfile = openfile(filename, False)
-  if not peerfile:
-    raise ValueError("Cannot open file: %s\n" % filename)
+  
   content = peerfile.readat(None, 0)
   lines = content.split("\n")
   peers = list()
@@ -26,9 +25,7 @@ def export_peers(peerslist, filename):
   #   log ("Haven't reached export time. No peers exported.\n")
 
   peerfile = openfile(filename, True)
-  if not peerfile:
-    raise ValueError("Cannot open file: %s\n" % filename)
-
+  
   offset = 0 
   numpeers = 0 
   for l in peerslist:
