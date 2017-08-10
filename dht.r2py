@@ -13,7 +13,7 @@ DHT_EVENT_VALUES = 3
 
 class DHT:
 
-  def __init__(self, dht_id, verify_func, version_id):
+  def __init__(self, dht_id, keypair, version_id):
     self.id = dht_id
     self.long_id = util.bytes_to_int(self.id)
     self.version_id = version_id 
@@ -23,7 +23,7 @@ class DHT:
     self.storage = storage.Storage(self.id) 
     self.secret_package = util.rotate_secret() 
 
-    self.verify = verify_func 
+    self.keypair = keypair 
 
     self.refresh_buckets_time = getruntime() + random.random_int_below(3)
     self.to_sleep = getruntime() + 5 + random.random_int_below(10)  # first periodic call in 5 - 15 sec
@@ -55,8 +55,9 @@ class DHT:
           if verified:
             sender_id = msg["a"]["id"]
             stored = self.storage.store_value(sender_id, msg)
-            log (self.storage)
+            # log (self.storage)
             if stored: 
+              log ("Put msg stored!\n")
               return rpc.send_put(self.id, source_ip, source_port, msg["t"], my_port)
             else: 
               return rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Same seq but values different", my_port, self.version_id)
@@ -71,7 +72,7 @@ class DHT:
             target_id_long = util.bytes_to_int(target)
             tid = msg["t"]
             value_obj = self.storage.retrieve_value(target)
-            log (value_obj, "\n")
+            # log (value_obj, "\n")
             nodes_str = "".join(self.router.get_closest_good_nodes(target_id_long))
             token = util.make_token(source_ip, self.secret_package[1])
 
@@ -148,30 +149,30 @@ class DHT:
                   self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for query (msg)
                 else:   # nodes_len normal & existing lookup - it's a proper reply 
 
-                  self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
-                  # extract nodes info from list 
-                  i = 0 
-                  while i <= len(nodes) - 26:
-                    n = nodes[i:i+26]
-                    # convert id, ip and port to host order and readable format 
-                    n_id = n[:20]
-                    n_ip = ".".join([str(ord(x)) for x in n[20:24]])
-                    n_port = util.bytes_to_int(n[24:])
-                    i += 26 
-                    if n_id == self.id:
-                      continue;
-                    self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
+                  if not (lookup.lookup_done or lookup.done):
+                    self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
+                    # extract nodes info from list 
+                    i = 0 
+                    while i <= len(nodes) - 26:
+                      n = nodes[i:i+26]
+                      # convert id, ip and port to readable format 
+                      n_id = n[:20]
+                      n_ip = ".".join([str(ord(x)) for x in n[20:24]])
+                      n_port = util.bytes_to_int(n[24:])
+                      i += 26 
+                      # log (n_ip, ": ", n_port, "\n")
+                      if n_id == self.id:
+                        continue;
+                      self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
 
-                    # insert into the corresponding lookup  
-                    if lookup: 
+                      # insert into the corresponding lookup  
                       lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
-                  if lookup and not lookup.done: 
                     # 1 means this node has replied 
                     lookup.insert(sender_id, source_ip, source_port, 1, token, token_len)
                     # query another alpha nodes that haven't replied 
                     self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
-                  # log ("--------- LOOKUP ---------\n", str(lookup))
+                    # log ("--------- LOOKUP ---------\n", str(lookup))
                 break 
 
           elif util.tid_match(tid, "gt"):
@@ -188,7 +189,7 @@ class DHT:
                 sig = res["r"]["sig"]
                 # verify signature, if invalid, return error 206 invalid signature 
                 try:
-                  self.verify(sig, values)
+                  self.keypair.verify(sig, str(values))
                 except:
                   log ("Invalid signature.\n")
                   return rpc.send_error(source_ip, source_port, tid, len(tid), 206, "Invalid Signature", my_port, self.version_id)
@@ -203,8 +204,11 @@ class DHT:
                 log ("Unknown get lookup!\n")
                 self.router.add_contact(sender_id, source_ip, source_port, 1)   # 1 for query (msg)
               else: # nodes_len normal & existing lookup - it's a proper reply 
-                # return if we've got value item 
-                if len(values) > 0:
+
+                # return if we've got value item, 
+                # AND we're sending get/get_peers 
+                # AND it's not for setup 
+                if len(values) > 0 and lookup.port < 2 and not lookup.id == self.id:
                   return self.lookups.lookup_finished(lookup, callback, values=values, res=res["r"])
 
                 if not (lookup.lookup_done or lookup.done):
@@ -225,17 +229,15 @@ class DHT:
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
 
                     # insert into the corresponding lookup  
-                    if lookup: 
-                      lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
+                    lookup.insert(n_id, n_ip, n_port, 0, token, len(token))
 
-                  if lookup: 
-                    # 1 means this node has replied 
-                    lookup.insert(sender_id, source_ip, source_port, 1, token, len(token))
-                    # query another alpha nodes that haven't replied 
-                    self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
+                  # 1 means this node has replied 
+                  lookup.insert(sender_id, source_ip, source_port, 1, token, len(token))
+                  # query another alpha nodes that haven't replied 
+                  self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
                 
             except Exception, e:
-              log ("Faulty response to get. Error: %s\n" % str(e))                
+              log ("Faulty response to get. Error: %s\n" % e)                
 
           elif util.tid_match(tid, "ap") or util.tid_match(tid, "pt"):  
             lids = (util.tid_match(tid, "ap"), util.tid_match(tid, "pt"))
@@ -243,6 +245,7 @@ class DHT:
               if lid: 
                 # log ("Got reply to announce_peer/put from: %s %d\n" %(source_ip, source_port))
                 lookup = self.lookups.find_lookup_by_tid(lid) 
+
                 if lookup == None:
                   log ("Unknown announce_peer/put lookup!\n")
                   self.router.add_contact(sender_id, source_ip, source_port, 1)   # 1 for query (msg)
@@ -324,6 +327,8 @@ class DHT:
       token = msg["a"]["token"]
       sender_id = msg["a"]["id"]
       st = self.storage.retrieve_value(sender_id)
+      log (st, "\n")
+      # log (opts, "\n")
 
       if len(util.encoder(value)) >= 1000:
         rpc.send_error(source_ip, source_port, tid, len(tid), 205, "Message too big", my_port, self.version_id)
@@ -335,26 +340,27 @@ class DHT:
         rpc.send_error(source_ip, source_port, tid, len(tid), 207, "Salt too big", my_port, self.version_id)
         return False 
       # if the key-value already exist in storage, we can only update it - requiring a mutable put message  
-      if st:
+      if st is not None:
         # if the put does not have all the required fields for mutable updates, prevent it 
         if not (opts.has_key("k") and opts.has_key("seq") and opts.has_key("sig")):
           rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Lack mutable attributes", my_port, self.version_id)
           return False 
-        if opts.has_key("cas") and not opts["cas"] == st["seq"]:
+        if opts.has_key("cas") and not opts["cas"] == st["a"]["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", my_port, self.version_id)
           return False 
-        if opts["seq"] < st["seq"]:
+        if opts["seq"] < st["a"]["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", my_port, self.version_id)
           return False 
-        # verify signature 
+        # verify signature
         try:
-          self.verify(opts["sig"], value)
-        except:
-          log ("Invalid Signature.")
+          self.keypair.verify(opts["sig"], str(value))
+        except Exception, e:
+          log ("Invalid Signature: %s\n" % e)
           rpc.send_error(source_ip, source_port, tid, len(tid), 206, "Invalid Signature", my_port, self.version_id)
           return False 
-    except:
-      log ("Invalid put request!\n")
+
+    except Exception, e:
+      log ("Invalid put request! Error: %s\n" % e)
       if msg.has_key("t"):
         rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 203, "Invalid arguments", my_port, self.version_id) 
       return False 
