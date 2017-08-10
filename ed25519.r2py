@@ -5,13 +5,72 @@ SHA 512 implementation from Thomas Dixon's sha2 repo at: https://github.com/thom
 """
 
 binascii = dy_import_module("binascii.r2py")
-sha = dy_import_module("sha.r2py")
 random = dy_import_module("random.r2py")
 util = dy_import_module("util.r2py")
 
 SECRETKEYBYTES = 64
 PUBLICKEYBYTES = 32
 SIGNATUREKEYBYTES = 64
+
+
+def _sha_long2bytesBigEndian(n, thisblocksize=0):
+    """Convert a long integer to a byte string.
+
+    If optional blocksize is given and greater than zero, pad the front
+    of the byte string with binary zeros so that the length is a multiple
+    of blocksize.
+    """
+
+    # Justin: I changed this to avoid using pack. I didn't test performance, etc
+    s = ''
+    while n > 0:
+        #original:
+        # s = struct.pack('>I', n & 0xffffffffL) + s
+        # n = n >> 32
+        s = chr(n & 0xff) + s
+        n = n >> 8
+
+    # Strip off leading zeros.
+    for i in range(len(s)):
+        if s[i] <> '\000':
+            break
+    else:
+        # Only happens when n == 0.
+        s = '\000'
+        i = 0
+
+    s = s[i:]
+
+    # Add back some pad bytes. This could be done more efficiently
+    # w.r.t. the de-padding being done above, but sigh...
+    if thisblocksize > 0 and len(s) % thisblocksize:
+        s = (thisblocksize - len(s) % thisblocksize) * '\000' + s
+
+    return s
+
+
+def _sha_bytelist2longlongBigEndian(list):
+    "Transform a list of characters into a list of long longs (64 bits)."
+
+    imax = len(list)/8
+    hl = [0] * imax
+
+    j = 0
+    i = 0
+    while i < imax:
+        b0 = long(ord(list[j])) << 56
+        b1 = long(ord(list[j+1])) << 48
+        b2 = long(ord(list[j+2])) << 40
+        b3 = long(ord(list[j+3])) << 32
+        b4 = long(ord(list[j+4])) << 24
+        b5 = long(ord(list[j+5])) << 16
+        b6 = long(ord(list[j+6])) << 8
+        b7 = long(ord(list[j+7]))
+        hl[i] = b0 | b1 | b2 | b3 | b4 | b5 | b6 | b7
+        i = i+1
+        j = j+8
+
+    return hl
 
 
 ################################
@@ -53,19 +112,23 @@ class sha512(object):
   def __init__(self, m=None):       
     self._buffer = ''
     self._counter = 0
-   
+    self.m = m 
+
     if m is not None:
       if type(m) is not str:
-        raise TypeError, '%s() argument 1 must be string, not %s' % (self.__class__.__name__, type(m).__name__)
+        raise TypeError, 'argument 1 must be string, not %s' % (type(m))
       self.update(m)
      
   def _rotr(self, x, y):
       return ((x >> y) | (x << (64-y))) & 0xFFFFFFFFFFFFFFFF
-                 
-  def _sha512_process(self, chunk):
-    w = [0]*80
-    w[0:16] = struct.unpack('!16Q', chunk)
 
+
+  def _sha512_process(self, chunk):
+
+    w = [0]*80
+    # w[0:16] = struct.unpack('!16Q', chunk)  # long long 
+    w[0:16] = _sha_bytelist2longlongBigEndian(chunk)
+   
     for i in range(16, 80):
       s0 = self._rotr(w[i-15], 1) ^ self._rotr(w[i-15], 8) ^ (w[i-15] >> 7)
       s1 = self._rotr(w[i-2], 19) ^ self._rotr(w[i-2], 61) ^ (w[i-2] >> 6)
@@ -96,27 +159,36 @@ class sha512(object):
     if not m:
       return
     if type(m) is not str:
-      raise TypeError, 'argument 1 must be string, not %s' % (type(m).__name__)
+      raise TypeError, 'argument 1 must be string, not %s' % (type(m))
    
     self._buffer += m
     self._counter += len(m)
-   
+
     while len(self._buffer) >= 128:
       self._sha512_process(self._buffer[:128])
       self._buffer = self._buffer[128:]
-         
+  
   def digest(self):
     mdi = self._counter & 0x7F
-    length = struct.pack('!Q', self._counter<<3)
-  
+    length = _sha_long2bytesBigEndian(self._counter<<3, thisblocksize=8)
+
     if mdi < 112:
       padlen = 111-mdi
     else:
       padlen = 239-mdi
   
-    r = self.copy()
+    r = new(self.m)
+    # log (len('\x80'+('\x00'*(padlen+8))+length), "\n")
     r.update('\x80'+('\x00'*(padlen+8))+length)
-    return ''.join([struct.pack('!Q', i) for i in r._h[:self._output_size]])
+
+    # for i in r._h[:self._output_size]:
+    #   log(i, "\n")
+    #   log(_sha_long2bytesBigEndian(i))
+
+    return ''.join([_sha_long2bytesBigEndian(i) for i in r._h[:self._output_size]])
+
+  def hexdigest(self):
+    return ''.join(['%02x' % ord(c) for c in self.digest()])
 
 
 ################################
@@ -293,7 +365,7 @@ def random_scalar(entropy_f): # 0..L-1 inclusive
   return oversized % L
 
 def password_to_scalar(pw):
-  oversized = sha.sha_hash(pw)
+  oversized = new(pw).digest() 
   return int(oversized, 16) % L
 
 def scalar_to_bytes(y):
@@ -400,7 +472,7 @@ _zero_bytes = Zero.to_bytes()
 
 
 def arbitrary_element(seed): # unknown DL
-  hseed = sha.sha_hash(seed)
+  hseed = new(seed).digest() 
   y = int(hseed, 16) % Q
 
   # we try successive Y values until we find a valid point
@@ -486,7 +558,7 @@ def bytes_to_element(bytes):
 ################################
 
 def H(m):
-    return sha.sha_hash(m)
+    return new(m).digest() 
 
 def eddsa_publickey(seed):
     assert len(seed) == 32
@@ -697,6 +769,8 @@ def selftest():
 
   vk.verify(sig, message)
 
+  # sha = new("helloworld!!").hexdigest()
+  # log (sha, "\n")
 
 if callfunc == "initialize":
   selftest()
