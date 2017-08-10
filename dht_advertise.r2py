@@ -7,7 +7,7 @@ peerfile = dy_import_module("peerfile.r2py")
 log (getruntime(), "\n")
 
 
-# peers = [("router.utorrent.com", 6881), ("bttracker.debian.org", 6881), ("router.bittorrent.com", 6881)]
+# my_peers = [("router.utorrent.com", 6881, "a"), ("bttracker.debian.org", 6881, "b"), ("router.bittorrent.com", 6881, "c")]
 my_peers = peerfile.import_peers("peers.txt")
 
 my_ip = getmyip()
@@ -83,9 +83,9 @@ def callback(event, id, data, data_len=0, res=None):
    
   # log (mycontext["dht"].router)
 
-def dhtadvertise_setup(my_id, callback, peers=my_peers, verify=None, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_setup(my_id, callback, peers=my_peers, verify=None, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
   try: 
-    mycontext["dht"] = dht_module.DHT(my_id, verify, my_version)
+    mycontext["dht"] = dht_module.DHT(my_id, verify, version)
     listen = setup_listen(setup_port, callback)
     createthread(listen)
     for p in peers:
@@ -107,7 +107,7 @@ def dhtadvertise_setup(my_id, callback, peers=my_peers, verify=None, my_version=
 
   sleep(0.1)
   # log (mycontext["dht"].router.get_all_nodes(), "\n")
-  mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, my_version, setup_port)    # lookup my_id 
+  mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, version, setup_port)    # lookup my_id 
 
   # call periodic 
   p = periodic(setup_port)
@@ -187,18 +187,19 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
       elif operation_type == "put":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform put.")
 
-    mycontext[operation_type] = False 
-
   return listen 
 
 
-def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+  # turn the flag 
+  mycontext["lookup"] = False 
+
   target_id = str(target_id)
   if version:
     version = str(version) 
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, callback, peers, version, my_port, setup_port)
+    dhtadvertise_setup(my_id, callback, peers, version=version, my_port=my_port, setup_port=setup_port)
  
   while True:
     if mycontext["setup"]:
@@ -212,6 +213,8 @@ def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None
   If port is not specified, automatically use the source port of the UDP packets 
 """
 def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=MY_PORT, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+  # turn the flag 
+  mycontext["announce"] = False 
 
   if version:
     version = str(version) 
@@ -219,7 +222,7 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
     raise ValueError("Port number must be in range: 1 - 65535.")
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, callback, peers, version, setup_port)
+    dhtadvertise_setup(my_id, callback, peers, version=version, my_port=my_port, setup_port=setup_port)
 
   while True:
     if mycontext["setup"]:
@@ -231,8 +234,10 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, peers=my_peers, opts=None, verify=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
-  
+def dhtadvertise_put(my_id, value, callback, peers=my_peers, opts=None, verify=None, my_port=MY_PORT, setup_port=SETUP_PORT):  
+  # turn the flag 
+  mycontext["put"] = False 
+
   if not value:
     raise ValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
@@ -258,7 +263,7 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, opts=None, verify=N
   # for immutable items, key is the SHA-1 hash of the value stored 
   # for mutable items, key is already available in the Keypair instance 
   key = None 
-  if not opts:
+  if opts is None:
     key = sha.sha_hash(str(value))
 
   if not mycontext["setup"]:
@@ -270,13 +275,16 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, opts=None, verify=N
       createthread(listen)
 
       # 2 for put lookup
-      return mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
       break 
 
   return key  # return key for future immutable lookup 
 
 
 def dhtadvertise_get(my_id, key, callback, peers=my_peers, verify=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+  # turn the flag 
+  mycontext["get"] = False 
+
   if not (isinstance(key, str) and len(key) == 20):
     raise ValueError("DHT get: key must be a 20-byte string.")
 
