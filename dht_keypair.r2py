@@ -30,10 +30,12 @@ class Keypair:
     return self.publickey.verify(sig, value)
 
   def opts(self, value):
+    value = str(value)
+    self.seq += 1  # increment seq for new put query 
+
     opts = {
       "k": self.publickey.vk_s,
       "seq": self.seq,
-      "v": str(value),
       "sig": self.sign(value)
     }
 
@@ -66,12 +68,16 @@ class Keypair:
 
 
 def import_keypair(filename, seq=0, cas=-1, salt=None):
-  file = openfile(filename, False)
+  try:
+    file = openfile(filename, False)
 
-  content = file.readat(PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE + ID_KEY_SIZE, 0)
-  sk = content[:PRIVATE_KEY_SIZE]
-  vk = content[PRIVATE_KEY_SIZE: PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE]
-  id = content[PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE:]
+    content = file.readat(PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE + ID_KEY_SIZE, 0)
+    sk = content[:PRIVATE_KEY_SIZE]
+    vk = content[PRIVATE_KEY_SIZE: PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE]
+    id = content[PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE:]
 
-  file.close()
-  return Keypair(sk, vk, id, seq, cas, salt)
+    file.close()
+    return Keypair(sk, vk, id, seq, cas, salt)
+
+  except FileNotFoundError:
+    return None

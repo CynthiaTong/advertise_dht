@@ -19,9 +19,7 @@ def make_tid(prefix, sequence):
   output = ""
   for n in prefix:
     output += chr(ord(n) & 0xFF) 
-  # binary_seq = "{0:b}".format(sequence)[:16]  # get the first 16 bits (2 bytes) of the integer 
-  output += int_to_bytes(sequence)   
-  # output += str(sequence)[:2]
+  output += int_to_bytes(sequence)
   return output 
 
 def tid_match(tid, prefix):
@@ -134,6 +132,9 @@ def bytes_to_int(bytes):
   for b in bytes:
     n = n * 256 + ord(b)
   return n
+
+def swap_endianess(num):
+  return ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
 
 # check if string length exceeds a certain max. 
 def length_check(index, length, buf_len):

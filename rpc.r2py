@@ -20,16 +20,16 @@ def send(buf, target_ip, target_port, my_port=63101):
     return 0 
 
 def add_version(version):
-  if version:
-    return "1:v4:" + str(version) + "1:y1:qe"
-  else:
+  if version is None:
     return "1:y1:qe"
+  else:
+    return "1:v4:" + str(version) + "1:y1:qe"
 
 def add_version_reply(version):
-  if version:
-    return "1:v4:" + version + "1:y1:re"
-  else:
+  if version is None:
     return "1:y1:re"
+  else:
+    return "1:v4:" + str(version) + "1:y1:re"
 
 
 """
@@ -105,9 +105,7 @@ def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peer
   if peers_list and len(peers_list) > 0:
     buf += "6:valuesl"
     for p in peers_list:
-      # !! port needs to be big endian 
-      buf += "%d:%s%s" % (6, util.ip_as_bytes(p.ip), str(util.htons(p.port)))
-      # log (list(ip_as_bytes(p.ip)+str(htons(p.port))), "\n")
+      buf += "%d:%s%s" % (6, util.ip_as_bytes(p.ip), util.int_to_bytes(p.port))
     buf += "e"
 
   if util.tid_match(tid, "fn"):
@@ -144,8 +142,6 @@ def send_error(ip, port, tid, tid_len, error_code, error_msg, my_port=63101, v=N
 """
 
 def put(self_id, value, ip, port, tid, token, my_port=63101, opts=None):
-  # for key, val in opts.items():
-  #   log (key, " ", val, "\n")
   msg = {
     "a": {
       "id": self_id,
@@ -158,23 +154,10 @@ def put(self_id, value, ip, port, tid, token, my_port=63101, opts=None):
   }
 
   if opts:
-    msg["a"]["k"] = opts["k"]
-    if opts.has_key("seq"):
-      msg["a"]["seq"] = opts["seq"]   # needs be larger than existing seq! 
-    else:
-      log ("no seq provided.\n")
-      # increment from existing record?? 
+    msg["a"].update(opts)
 
-    msg["a"]["sig"] = opts["sig"]
-
-    if opts.has_key("salt"):
-      msg["a"]["salt"] = opts["salt"]
-
-    if opts.has_key("cas"):
-      msg["a"]["cas"] = opts["cas"]
-
-  msg = util.encoder(msg)
-  return send(msg, ip, port, my_port)
+  # log (msg, "\n")
+  return send(util.encoder(msg), ip, port, my_port)
 
 
 def send_put(self_id, ip, port, tid, my_port=63101):
@@ -204,7 +187,7 @@ def send_get(self_id, ip, port, value_obj, nodes_str, tid, token, my_port=63101)
     "r": {
       "id": self_id,
       "token": token,
-      "v": "",    # placeholder 
+      "v": "",    #placeholder
       "nodes": nodes_str
     },
     "t": tid,
@@ -212,14 +195,7 @@ def send_get(self_id, ip, port, value_obj, nodes_str, tid, token, my_port=63101)
   }
 
   if value_obj:
-    msg["r"]["v"] = value_obj["a"]["v"]
-    opts = value_obj["a"]
-    # additional mutable info 
-    if opts.has_key("k"):
-      msg["r"]["k"] = opts["k"]
-    if opts.has_key("seq"):
-      msg["r"]["seq"] = opts["seq"]
-    if opts.has_key("sig"):
-      msg["r"]["sig"] = opts["sig"]
-  
+    msg["r"].update(value_obj["a"])
+
+  # log (msg, "\n")
   return send(util.encoder(msg), ip, port, my_port)
