@@ -1,0 +1,50 @@
+ed = dy_import_module("ed25519.r2py")
+sha = dy_import_module("sha.r2py")
+
+class Keypair:
+  def __init__(self, seq=0, cas=-1, salt=None):
+    self.privatekey, self.publickey = ed.create_keypair()
+    self.seq = seq 
+    self.cas = cas 
+    self.salt = salt
+    self.create_key()
+
+  # id is the sha-1 hash of publickey (plus salt if it is present)
+  def create_key(self):
+    if self.salt:
+      self.key = sha.sha_hash(self.publickey.vk_s + self.salt)
+    else:
+      self.key = sha.sha_hash(self.publickey.vk_s)
+
+  def sign(self, value):
+    return self.privatekey.sign(value)
+
+  def verify(self, sig, value):
+    return self.publickey.verify(sig, value)
+
+  def opts(self, value):
+    opts = {
+      "k": self.publickey.vk_s,
+      "seq": self.seq,
+      "v": str(value),
+      "sig": self.sign(value)
+    }
+
+    if self.cas > -1:
+      opts["cas"] = self.cas 
+    if self.salt is not None and isinstance(self.salt, str):
+      opts["salt"] = self.salt 
+
+    return opts 
+
+  def __str__(self):
+    output = "privatekey: %s\npublickey: %s\nkey(id) %s\n" %(self.privatekey.sk_s, self.publickey.vk_s, self.key)
+    output += "seq: %d \n" %(self.seq)
+    if self.cas > -1:
+      output += "cas: %d \n" %(self.cas)
+    if self.salt is not None and isinstance(self.salt, str):
+      output += "salt: %s\n" %(self.salt)
+
+    return output 
+
+  # keypair file io 

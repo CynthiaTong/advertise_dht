@@ -83,9 +83,9 @@ def callback(event, id, data, data_len=0, res=None):
    
   # log (mycontext["dht"].router)
 
-def dhtadvertise_setup(my_id, callback, peers=my_peers, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_setup(my_id, callback, peers=my_peers, verify=None, my_version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
   try: 
-    mycontext["dht"] = dht_module.DHT(my_id, my_version)
+    mycontext["dht"] = dht_module.DHT(my_id, verify, my_version)
     listen = setup_listen(setup_port, callback)
     createthread(listen)
     for p in peers:
@@ -187,6 +187,8 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
       elif operation_type == "put":
         raise DHTAdvertiseError("DHT Timeout: Failed to perform put.")
 
+    mycontext[operation_type] = False 
+
   return listen 
 
 
@@ -229,12 +231,17 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, peers=my_peers, my_port=MY_PORT, setup_port=SETUP_PORT, **opts): 
+def dhtadvertise_put(my_id, value, callback, peers=my_peers, opts=None, verify=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+  
   if not value:
     raise ValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
     raise ValueError("DHT Put: values must be under 1000 bytes.")
+
   if opts:
+    if not isinstance(opts, dict):
+      raise TypeError("opts must be a dictionary if provided.")  
+
     if opts.has_key("cas") and not isinstance(opts["cas"], int):
       raise ValueError("Mutable DHT put: cas must be an Integer if provided.")
     if not (opts.has_key("k") and len(opts["k"]) == 32):
@@ -249,18 +256,13 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, my_port=MY_PORT, se
       raise ValueError("Mutable DHT put: sequence number must be an Integer.")
 
   # for immutable items, key is the SHA-1 hash of the value stored 
-  # for mutable items, key is the SHA-1 hash of k(public key) + salt if salt exists
+  # for mutable items, key is already available in the Keypair instance 
   key = None 
-  if opts:
-    if opts.has_key("salt"):
-      key = sha.sha_hash(opts["k"] + opts["salt"])
-    else:
-      key = sha.sha_hash(opts["k"])
-  else:
+  if not opts:
     key = sha.sha_hash(str(value))
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, callback, peers, setup_port=setup_port)
+    dhtadvertise_setup(my_id, callback, peers, verify, setup_port=setup_port)
 
   while True:
     if mycontext["setup"]:
@@ -268,18 +270,18 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, my_port=MY_PORT, se
       createthread(listen)
 
       # 2 for put lookup
-      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      return mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
       break 
 
-  return key  # return key for future lookup 
+  return key  # return key for future immutable lookup 
 
 
-def dhtadvertise_get(my_id, key, callback, peers=my_peers, my_port=MY_PORT, setup_port=SETUP_PORT): 
+def dhtadvertise_get(my_id, key, callback, peers=my_peers, verify=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
   if not (isinstance(key, str) and len(key) == 20):
     raise ValueError("DHT get: key must be a 20-byte string.")
 
   if not mycontext["setup"]:
-    dhtadvertise_setup(my_id, callback, peers, setup_port=setup_port)
+    dhtadvertise_setup(my_id, callback, peers, verify, setup_port=setup_port)
 
   while True:
     if mycontext["setup"]:

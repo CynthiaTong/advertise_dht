@@ -13,7 +13,7 @@ DHT_EVENT_VALUES = 3
 
 class DHT:
 
-  def __init__(self, dht_id, version_id):
+  def __init__(self, dht_id, verify_func, version_id):
     self.id = dht_id
     self.long_id = util.bytes_to_int(self.id)
     self.version_id = version_id 
@@ -22,6 +22,9 @@ class DHT:
     self.lookups = lookup.DHTLookup(self.id, self.router)
     self.storage = storage.Storage(self.id) 
     self.secret_package = util.rotate_secret() 
+
+    self.verify = verify_func 
+
     self.refresh_buckets_time = getruntime() + random.random_int_below(3)
     self.to_sleep = getruntime() + 5 + random.random_int_below(10)  # first periodic call in 5 - 15 sec
 
@@ -183,7 +186,12 @@ class DHT:
               sig = ""
               if res["r"].has_key("sig"):
                 sig = res["r"]["sig"]
-                # verify signature, if invalid, return error 206 invalid sig
+                # verify signature, if invalid, return error 206 invalid signature 
+                try:
+                  self.verify(sig, values)
+                except:
+                  log ("Invalid signature.\n")
+                  return rpc.send_error(source_ip, source_port, tid, len(tid), 206, "Invalid Signature", my_port, self.version_id)
 
               lid = util.tid_match(tid, "gt")
               lookup = self.lookups.find_lookup_by_tid(lid)
@@ -338,8 +346,13 @@ class DHT:
         if opts["seq"] < st["seq"]:
           rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", my_port, self.version_id)
           return False 
-        # TODO: verify signiture - need ed25519 supercop/ref10 support 
-  
+        # verify signature 
+        try:
+          self.verify(opts["sig"], value)
+        except:
+          log ("Invalid Signature.")
+          rpc.send_error(source_ip, source_port, tid, len(tid), 206, "Invalid Signature", my_port, self.version_id)
+          return False 
     except:
       log ("Invalid put request!\n")
       if msg.has_key("t"):
