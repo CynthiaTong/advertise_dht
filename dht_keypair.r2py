@@ -73,4 +73,5 @@ def import_keypair(filename, seq=0, cas=-1, salt=None):
   vk = content[PRIVATE_KEY_SIZE: PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE]
   id = content[PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE:]
 
+  file.close()
   return Keypair(sk, vk, id, seq, cas, salt)
