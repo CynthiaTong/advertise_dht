@@ -5,6 +5,12 @@ PRIVATE_KEY_SIZE = 64
 PUBLIC_KEY_SIZE = 32
 ID_KEY_SIZE = 20
 
+class NonexistingKeypairFileError(Exception):
+  """ Error when keypair file does not exist """
+class GeneralKeypairFileError(Exception):
+  """ Other general error when reading from keypair file """
+
+
 class Keypair:
   def __init__(self, private_key=None, public_key=None, id_key=None, seq=0, cas=-1, salt=None):
     self.privatekey, self.publickey = ed.create_keypair(private_key, public_key)
@@ -72,6 +78,7 @@ def import_keypair(filename, seq=0, cas=-1, salt=None):
     file = openfile(filename, False)
 
     content = file.readat(PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE + ID_KEY_SIZE, 0)
+
     sk = content[:PRIVATE_KEY_SIZE]
     vk = content[PRIVATE_KEY_SIZE: PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE]
     id = content[PRIVATE_KEY_SIZE + PUBLIC_KEY_SIZE:]
@@ -80,4 +87,6 @@ def import_keypair(filename, seq=0, cas=-1, salt=None):
     return Keypair(sk, vk, id, seq, cas, salt)
 
   except FileNotFoundError:
-    return None
+    raise NonexistingKeypairFileError("Keypair file %s does not exist." % filename)
+  except Exception, e:
+    raise GeneralKeypairFileError("Error importing from keypair file %s, %s" % (filename, repr(e)))

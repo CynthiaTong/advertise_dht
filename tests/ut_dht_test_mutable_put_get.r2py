@@ -24,7 +24,8 @@ def test_correct_signature(my_p, setup_p, keypair):
   data_item = {"a": [0, 1, 2], "hello": "world"}
 
   if index == 0:
-    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, my_port=my_p)
+    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, 
+        my_port=my_p)
 
     while True: 
       if dhtadvertise.mycontext["put"]:
@@ -36,7 +37,8 @@ def test_correct_signature(my_p, setup_p, keypair):
         assert dhtadvertise.mycontext["cb"]["data"] == data_item, "False data item returned by get."
         break 
   else:
-    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, setup_port=setup_p)
+    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, 
+        setup_port=setup_p)
 
 
 def test_false_signature_put(my_p, setup_p, keypair):
@@ -46,7 +48,8 @@ def test_false_signature_put(my_p, setup_p, keypair):
   data_item = {"a": [0, 1, 2], "hello": "world"}
 
   if index == 0:
-    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, my_port=my_p, setup_port=setup_p)
+    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, 
+        my_port=my_p, setup_port=setup_p)
 
     while True: 
       if dhtadvertise.mycontext["put"]:
@@ -54,7 +57,8 @@ def test_false_signature_put(my_p, setup_p, keypair):
 
         new_kp = kp.Keypair()
         new_data = {"b": [0, 1, 2], "hello": "world"}
-        dhtadvertise.dhtadvertise_put(ids[0], new_data, dhtadvertise.callback, peers, key, new_kp, my_port=my_p, setup_port=setup_p)
+        dhtadvertise.dhtadvertise_put(ids[0], new_data, dhtadvertise.callback, peers, key, new_kp, 
+            my_port=my_p, setup_port=setup_p)
         break 
 
     while True:
@@ -63,16 +67,20 @@ def test_false_signature_put(my_p, setup_p, keypair):
         break
 
   else:
-    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, setup_port=setup_p)
+    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, 
+        setup_port=setup_p)
 
 
 if callfunc == "initialize":
 
   ids = dhtadvertise.random_ids_file("random_ids.txt", 10)
 
-  keypair = kp.import_keypair("keypair.txt")
-  if keypair is None:
+  keypair = None
+  try: 
+    keypair = kp.import_keypair("keypair.txt")
+  except:
     keypair = kp.Keypair()
+    keypair.export_keypair("keypair.txt")
 
   peers = list()
   n = 63101 
@@ -87,8 +95,8 @@ if callfunc == "initialize":
     my_p = int(callargs[0])
     setup_p = int(callargs[1])
 
-    # test_correct_signature(my_p, setup_p, keypair)
-    test_false_signature_put(my_p, setup_p, keypair)
+    test_correct_signature(my_p, setup_p, keypair)
+    # test_false_signature_put(my_p, setup_p, keypair)
 
   else:
     raise ValueError("must call this program with port arguments.")

@@ -1,19 +1,32 @@
+
 MAXPEERS = 200
 # export_peers_time = getruntime() + 60 * 5
 
-def import_peers(filename):
-  peerfile = openfile(filename, False)
-  
-  content = peerfile.readat(None, 0)
-  lines = content.split("\n")
-  peers = list()
-  for l in lines:
-    items = l.split(",")
-    if len(items) == 3:
-      peers.append(items)
 
-  peerfile.close()
-  return peers 
+class NonexistingPeerFileError(Exception):
+  """ Error when peer file does not exist """
+class GeneralPeerFileError(Exception):
+  """ Other general error when reading from peer file """
+
+
+def import_peers(filename):
+  try:
+    peerfile = openfile(filename, False)
+    
+    content = peerfile.readat(None, 0)
+    lines = content.split("\n")
+    peers = list()
+    for l in lines:
+      items = l.split(",")
+      if len(items) == 3:
+        peers.append(items)
+
+    peerfile.close()
+    return peers 
+  except FileNotFoundError: 
+    raise NonexistingPeerFileError("Peer file %s does not exist." % filename)
+  except Exception, e:
+    raise GeneralPeerFileError("Error importing from peer file %s, %s" % (filename, repr(e)))
 
 def export_peers(peerslist, filename):
   if len(peerslist) == 0:
