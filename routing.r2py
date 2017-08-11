@@ -1,3 +1,11 @@
+"""
+<Program Name>
+  routing.py
+
+<Purpose>
+  Contains the RoutingTable class needed for the DHT. 
+"""
+
 node = dy_import_module("node.r2py")
 bucket = dy_import_module("bucket.r2py")
 rpc = dy_import_module("rpc.r2py")
@@ -5,6 +13,18 @@ util = dy_import_module("util.r2py")
 random = dy_import_module("random.r2py")
 
 class RoutingTable:
+  """
+    <Purpose>
+      Each DHT node instance has a RoutingTable that stores all peer contact information. 
+    <Side Effects>
+      Uses the Bucket and Node class, used by the DHT class 
+    <Example Use>
+      # create a routing table  
+      router = RoutingTable(<20-byte id>, <k size>, <optional version identifier>)
+      # add a peer contact 
+      router.add_contact(<sender id>, <ip address>, <port number>, <message_type>)
+      etc. (see below for detailed method documentation)
+  """   
   def __init__(self, string_id, ksize, version_id=None):
     self.id = string_id
     self.long_id = util.bytes_to_int(string_id)
@@ -16,14 +36,12 @@ class RoutingTable:
   """
     Initialize the first bucket in this Routing Table. 
     Integer id range: [0, 2^160), which can represent any 20-byte string ids. 
-
   """
   def initial_bucket(self):
     self.buckets = [bucket.Bucket(0, 2**160, self.ksize)]
 
   """
     Split the bucket at a certain index in our bucket list. 
-
   """
   def split_bucket(self, index, bucket):
     # Ping the node at the top of the bucket's replacement list 
@@ -34,7 +52,6 @@ class RoutingTable:
 
   """
     Purge bad nodes whose pinged value >= 4 in all buckets 
-
   """
   def expire_buckets(self):
     for b in self.buckets:
@@ -46,18 +63,30 @@ class RoutingTable:
           # next expire_stuff_time in 2 - 6 minutes  
           self.expire_stuff_time = getruntime() + 120 + random.random_int_below(240)
 
-  """
-    Add a contact to this routing table, and updates its timing info based on 
-    its message type. 
-    
-    message types: 
-      0 for reply 
-      1 for query 
-      2 for everything else  
-
-  """
   def add_contact(self, sender_id, ip, port, message_type):
-
+    """
+    <Purpose>
+      Add a contact to this routing table, and updates its timing info based on 
+      its message type. 
+     
+    <Arguments>
+      sender_id:
+        the sender peer's id 
+      ip, port:
+        the ip address and port number of the sender  
+      message_type:
+        what type of message the sender has sent us 
+        types: 
+          0 for reply 
+          1 for query 
+          2 for everything else (including the case that we're adding from our peer file)
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the DHT class whenever it needs to add a contact.  
+    <Returns> 
+      True if successfully added, False otherwise. 
+    """
     new_node = node.Node(sender_id, ip, port)
 
     # never add if the node ID is identical to our own ID  
@@ -105,7 +134,6 @@ class RoutingTable:
 
   """
     Return all nodes in this routing table. 
-
   """
   def get_all_nodes(self):
     nodes = list()
@@ -115,16 +143,41 @@ class RoutingTable:
 
   """
     Return a list of buckets that haven't been queried in 3 minutes (to refresh)
-
   """
   def get_unvisited_buckets(self):
+    """
+    <Purpose>
+      Refresh all buckets that meets the refresh requirements.
+      Definition of a "refresh":
+        send a get_node message to a random node in a bucket, targetting a random 
+        id in that bucket's range 
+    <Arguments>
+      None. 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the DHT class when it's time for buckets refresh. 
+    <Returns> 
+      True if find_node message has been sent, False if anything goes wrong. 
+    """
     return [b for b in self.buckets if getruntime() - b.last_changed >= 3*60]
 
-  """
-    Refresh all buckets that need refreshing 
-
-  """
   def refresh_buckets(self):
+    """
+    <Purpose>
+      Refresh all buckets that meets the refresh requirements.
+      Definition of a "refresh":
+        send a get_node message to a random node in a bucket, targetting a random 
+        id in that bucket's range 
+    <Arguments>
+      None. 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the DHT class when it's time for buckets refresh. 
+    <Returns> 
+      True if find_node message has been sent, False if anything goes wrong. 
+    """
     buckets = self.get_unvisited_buckets()
     log ("%d buckets need refresh! \n" % len(buckets))
 
@@ -149,15 +202,14 @@ class RoutingTable:
         random_id = util.int_to_bytes(b.random_id())
         n = q.random_node()
         tid = util.make_tid("fn",  util.make_lid())
-        rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, v=self.version_id)
-        self.pinged(n, q)
-        refreshed = True 
+        refreshed = rpc.find_node(self.id, n.ip, n.port, tid, len(tid), random_id, v=self.version_id)
+        if refreshed:
+          self.pinged(n, q)
 
     return refreshed
 
   """
     Given a target id, return the node with that id or return None if node does not exist 
-
   """
   def find_node(self, target_id):
     i, bucket = self.find_bucket(target_id)
@@ -167,9 +219,8 @@ class RoutingTable:
     return None 
 
   """
-  Given a node instance or an integer id number, find the bucket which the node/id falls into. 
-  Return index in the bucket list and the bucket itself 
-
+    Given a node instance or an integer id number, find the bucket which the node/id falls into. 
+    Return index in the bucket list and the bucket itself 
   """
   def find_bucket(self, *args):
     arg = args[0]
@@ -184,7 +235,6 @@ class RoutingTable:
   """
     Return a formatted list of closest nodes. 
     The node id, ip and port info are formatted to a string for sending as part of a RPC message 
-
   """
   def insert_closest_node(self, nodes_list, target_id, node):
     i = 0 
@@ -212,13 +262,21 @@ class RoutingTable:
 
     return nodes_list 
 
-  """
-  Get the strictly closest good nodes to a given target ID.
-  Used for replying to get_peers/find_node/get queries 
-  Note: target_ids are integer values. 
-
-  """
   def get_closest_good_nodes(self, target_id):
+    """
+    <Purpose>
+      Get the strictly closest good nodes to a given target id 
+    <Arguments>
+      target_id:
+        the Integer target id that we are trying to find the closest ids for
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Used for replying to get_peers/find_node/get queries 
+    <Returns> 
+      nodes_list:
+        the list of compact closest nodes info 
+    """
     nodes_list = list()
     # linear scan through the routing table, and add to nodes list 
     for b in self.buckets:
@@ -228,10 +286,23 @@ class RoutingTable:
     log (len(nodes_list) , " nodes in nodes_list.\n")
     return nodes_list 
 
-  """
-    Get nodes for a specific lookup 
-  """
   def get_lookup_nodes(self, lookup, target_id):
+    """
+    <Purpose>
+      Get nodes for a specific lookup 
+    <Arguments>
+      lookup:
+        the lookup object we are getting the nodes for 
+      target_id:
+        the Integer target id that we are getting the nodes for 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Used to perform DHT lookups 
+    <Returns> 
+      lookup:
+        the lookup that has been filled with lookup nodes 
+    """
 
     # find the bucket in which the target id resides and add its nodes 
     current_index, current_bucket = self.find_bucket(target_id)
@@ -262,7 +333,6 @@ class RoutingTable:
   """
     An alternative approach to get nodes for lookup is linear scan through the table and add, 
     this might be more efficient, but it's not specified by BitTorrent or the original Kademlia paper. 
-
   """
   # def get_lookup_nodes(self, lookup, target_id):
   #   for b in self.buckets:
@@ -272,19 +342,29 @@ class RoutingTable:
 
   """
     Helper for adding nodes inside a bucket to a lookup 
-
   """
   def add_to_lookup(self, bucket, lookup):
     nodes = bucket.get_nodes()
     for n in nodes:
       lookup.insert(n.id, n.ip, n.port) 
 
-  """
-    Update a node's pinged and last_pinged attributes 
-    Ping a replacement node if this node has gone bad (pinged >= 3)
-
-  """
   def pinged(self, node, bucket=None):
+    """
+    <Purpose>
+      Update a node's pinged and last_pinged attributes 
+      Ping a replacement node if this node has gone bad (pinged >= 3)    
+    <Arguments>
+      node:
+        the node whose information we are updating 
+      bucket (default to None):
+        the bucket that contains this node 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Used when a node has been queried (ping or other querying messages)  
+    <Returns> 
+      None
+    """
     node.pinged += 1 
     node.last_pinged = getruntime()
     if node.pinged >= 3:
@@ -295,7 +375,6 @@ class RoutingTable:
 
   """
     Ping the top node in a bucket's replacement list 
-
   """
   def ping_replacement(self, bucket):
     tid = util.make_tid("pn", util.make_lid())
@@ -306,7 +385,6 @@ class RoutingTable:
 
   """
     String representation of the routing table 
-
   """
   def __str__(self):
     output = ""
