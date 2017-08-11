@@ -5,6 +5,7 @@ lookup = dy_import_module("lookup.r2py")
 storage = dy_import_module("storage.r2py")
 util = dy_import_module("util.r2py")
 random = dy_import_module("random.r2py")
+sha = dy_import_module("sha.r2py")
 
 
 TOKEN_SIZE = 16 
@@ -51,10 +52,9 @@ class DHT:
       elif isinstance(msg, dict):
         if msg.has_key("q") and msg["q"] == "put":
           log ("Put req from: %s %d\n" %(source_ip, source_port))
-          verified = self.verify_put(msg, source_ip, source_port, my_port)
-          if verified:
-            sender_id = msg["a"]["id"]
-            stored = self.storage.store_value(sender_id, msg)
+          key = self.verify_put(msg, source_ip, source_port, my_port)
+          if key:
+            stored = self.storage.store_value(key, msg)
             # log (self.storage)
             if stored: 
               log ("Put msg stored!\n")
@@ -70,11 +70,11 @@ class DHT:
             sender_id = msg["a"]["id"]
             self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
             target = msg["a"]["target"]
-            target_id_long = util.bytes_to_int(target)
+            target_id_int = util.bytes_to_int(target)
             tid = msg["t"]
             value_obj = self.storage.retrieve_value(target)
             # log (value_obj, "\n")
-            nodes_str = "".join(self.router.get_closest_good_nodes(target_id_long))
+            nodes_str = "".join(self.router.get_closest_good_nodes(target_id_int))
             token = util.make_token(source_ip, self.secret_package[1])
 
             log ("Sending response to get.\n")
@@ -123,12 +123,11 @@ class DHT:
               # log ("Got %d values!\n" % (values_len/6))
               lookup = self.lookups.find_lookup_by_tid(lids[0]) 
               filtered_values = list()
-              # i = 0 
+
               for i in range(0, values_len, 6):
                 v = values[i:i+6]
                 v_ip = ".".join([str(ord(x)) for x in v[:4]])
                 v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
-                # i += 6
                 filtered_values.append((v_ip, v_port))
 
               # since we've got values, stop the lookup and return callback
@@ -154,14 +153,12 @@ class DHT:
                   if not (lookup.lookup_done or lookup.done):
                     self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
                     # extract nodes info from list 
-                    # i = 0 
                     for i in range(0, len(nodes), 26):
                       n = nodes[i:i+26]
                       # convert id, ip and port to readable format 
                       n_id = n[:20]
                       n_ip = ".".join([str(ord(x)) for x in n[20:24]])
                       n_port = util.bytes_to_int(n[24:])
-                      # i += 26 
                       # log (n_ip, ": ", n_port, "\n")
                       if n_id == self.id:
                         continue;
@@ -221,14 +218,13 @@ class DHT:
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
 
                   # extract nodes info from string 
-                  # i = 0 
                   for i in range(0, len(nodes), 26):
                     n = nodes[i:i+26]
                     # convert id, ip and port to host order and readable format 
                     n_id = n[:20]
                     n_ip = ".".join([str(ord(x)) for x in n[20:24]])
                     n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
-                    # i += 26 
+
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
@@ -331,12 +327,25 @@ class DHT:
 
   def verify_put(self, msg, source_ip, source_port, my_port):
     try: 
-      value = msg["a"]["v"]
+      key = None 
+    
       opts = msg["a"]
+      value = msg["a"]["v"]
       tid = msg["t"]
       token = msg["a"]["token"]
-      sender_id = msg["a"]["id"]
-      st = self.storage.retrieve_value(sender_id)
+
+      mutable = opts.has_key("k")
+      has_salt = opts.has_key("salt")
+      # key is constructed from value (for immutable data) or k + salt (for mutable data)
+      if mutable:
+        if has_salt:
+          key = sha.sha_hash(opts["k"] + opts["salt"])
+        else:
+          key = sha.sha_hash(opts["k"])
+      else:
+        key = sha.sha_hash(str(value))
+
+      st = self.storage.retrieve_value(key)
       # log (st, "\n")
       # log (opts, "\n")
 
@@ -346,9 +355,10 @@ class DHT:
       if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
         rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Invalid token", my_port, self.version_id)
         return False 
-      if opts.has_key("salt") and len(opts["salt"]) > 64:
+      if has_salt and len(opts["salt"]) > 64:
         rpc.send_error(source_ip, source_port, tid, len(tid), 207, "Salt too big", my_port, self.version_id)
         return False 
+
       # if the key-value already exist in storage, we can only update it - requiring a mutable put message  
       if st is not None:
         # if the put does not have all the required fields for mutable updates, prevent it 
@@ -379,7 +389,7 @@ class DHT:
             my_port, self.version_id) 
       return False 
 
-    return True 
+    return key  
 
   def verify_get(self, msg, source_ip, source_port, my_port):
     target = msg["a"].get("target")
@@ -390,8 +400,7 @@ class DHT:
       log ("Got get request with no target\n")
       rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Get with no target.", my_port, self.version_id)
       return False 
-    return True     
-
+    return True         
 
   def periodic(self, my_port, callback):
     log ("do periodic stuff.\n")

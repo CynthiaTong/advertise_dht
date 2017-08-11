@@ -10,7 +10,7 @@ class DHTLookup:
   def __init__(self, string_id, routing_table):
     self.id = string_id 
     self.lookups = list()
-    self.lookup_id = util.make_lid()
+    self.lid = util.make_lid()
     self.lookup_time = 0 
     self.router = routing_table
     self.stable_results = 0 
@@ -25,12 +25,11 @@ class DHTLookup:
     - > 2 for ANNOUNCE_PEER  
   
   """
-  def dht_lookup(self, string_id, port, callback, version, my_port=63101, value=None, opts=None):
+  def dht_lookup(self, target_string_id, port, callback, version, my_port=63101, value=None, opts=None):
     self.stable_results = 0 
-    target_id = util.bytes_to_int(string_id)
 
-    self.lookup_id += 1 
-    newest = Lookup(string_id, self.lookup_id, LOOKUP_CAPACITY, port, value, opts)
+    self.lid += 1 
+    newest = Lookup(target_string_id, self.lid, LOOKUP_CAPACITY, port, value, opts)
     oldest = None 
     # find the oldest lookup
     for l in self.lookups:
@@ -43,7 +42,7 @@ class DHTLookup:
     else:
       self.lookups.append(newest)
 
-    newest = self.router.get_lookup_nodes(newest, target_id)
+    newest = self.router.get_lookup_nodes(newest, newest.target_id)
     # log (newest)
     self.lookup_step(newest, callback, version, my_port)
     # update lookup_time 
@@ -74,11 +73,12 @@ class DHTLookup:
             if lookup.port > 2:
               # log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("ap", lookup.tid)
-              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, my_port, version)
+              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, n.token_len, 
+                  my_port, version)
             else: # lookup is for put 
               log ("Sending put to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("pt", lookup.tid)
-              rpc.put(lookup.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
+              rpc.put(self.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
 
             n.pinged += 1 
             n.last_req = getruntime()
@@ -330,4 +330,3 @@ class Lookup_Node():
     self.token = token 
     self.token_len = token_len
     self.pinged = 0 
-  

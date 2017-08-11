@@ -38,10 +38,13 @@ if callfunc == "initialize":
     data_item = {"a": [0, 1, 2], "hello": "world"}
 
     if index == 0:
-      key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, my_p)
-
+      key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, my_port=my_p)
+      
       while True: 
         if dhtadvertise.mycontext["put"]:
+          if key is None:
+            raise ValueError("Fails to receive immutable key.")
+
           dhtadvertise.dhtadvertise_get(ids[0], key, dhtadvertise.callback, peers)
           break 
 
@@ -50,7 +53,8 @@ if callfunc == "initialize":
           assert dhtadvertise.mycontext["cb"]["data"] == data_item, "False data item returned by get."
           exitall()
     else:
-      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, my_version="AD\0\0", my_port=my_p, setup_port=setup_p)
+      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, version="AD\0\0", 
+          my_port=my_p, setup_port=setup_p)
 
   else:
     raise ValueError("must call this program with port arguments.")
