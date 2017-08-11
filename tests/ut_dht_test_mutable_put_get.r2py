@@ -1,0 +1,95 @@
+"""
+  <Purpose> Test DHT mutable put and get methods. 
+
+  To run this test, do: 
+    - (in one shell)
+      for ((i=63103; i < 63120; i += 2)) 
+      do 
+        python repy.py restrictions.default dylink.r2py ut_dht_test_mutable_put_get.r2py $i $(($i + 1)) & 
+      done
+
+    - (in another shell)
+      python repy.py restrictions.default dylink.r2py ut_dht_test_mutable_put_get.r2py 63101 63102
+
+"""
+
+dhtadvertise = dy_import_module("dht_advertise.r2py")
+kp = dy_import_module("dht_keypair.r2py")
+
+
+def test_correct_signature(my_p, setup_p, keypair):
+
+  # check which instance this is 
+  index = (my_p - 63101) / 2 
+  data_item = {"a": [0, 1, 2], "hello": "world"}
+
+  if index == 0:
+    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, my_port=my_p)
+
+    while True: 
+      if dhtadvertise.mycontext["put"]:
+        dhtadvertise.dhtadvertise_get(ids[0], key, dhtadvertise.callback, peers)
+        break 
+
+    while True: 
+      if dhtadvertise.mycontext["get"]:
+        assert dhtadvertise.mycontext["cb"]["data"] == data_item, "False data item returned by get."
+        break 
+  else:
+    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, setup_port=setup_p)
+
+
+def test_false_signature_put(my_p, setup_p, keypair):
+
+  # check which instance this is 
+  index = (my_p - 63101) / 2 
+  data_item = {"a": [0, 1, 2], "hello": "world"}
+
+  if index == 0:
+    key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, keypair=keypair, my_port=my_p, setup_port=setup_p)
+
+    while True: 
+      if dhtadvertise.mycontext["put"]:
+        sleep(1)
+
+        new_kp = kp.Keypair()
+        new_data = {"b": [0, 1, 2], "hello": "world"}
+        dhtadvertise.dhtadvertise_put(ids[0], new_data, dhtadvertise.callback, peers, key, new_kp, my_port=my_p, setup_port=setup_p)
+        break 
+
+    while True:
+      if dhtadvertise.mycontext["put"]:
+        assert dhtadvertise.mycontext["cb"]["event"] == -1, "Did not return error for invalid signature."
+        break
+
+  else:
+    dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, keypair, my_port=my_p, setup_port=setup_p)
+
+
+if callfunc == "initialize":
+
+  ids = dhtadvertise.random_ids_file("random_ids.txt", 10)
+
+  keypair = kp.import_keypair("keypair.txt")
+  if keypair is None:
+    keypair = kp.Keypair()
+
+  peers = list()
+  n = 63101 
+  i = 0 
+  while n < 63120:
+    peers.append((getmyip(), n+1, ids[i]))
+    n += 2 
+    i += 1 
+
+  # port, setup port 
+  if len(callargs) == 2:
+    my_p = int(callargs[0])
+    setup_p = int(callargs[1])
+
+    # test_correct_signature(my_p, setup_p, keypair)
+    test_false_signature_put(my_p, setup_p, keypair)
+
+  else:
+    raise ValueError("must call this program with port arguments.")
+  

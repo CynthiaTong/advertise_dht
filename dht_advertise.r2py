@@ -23,6 +23,7 @@ mycontext["get"] = False
 mycontext["lock"] = createlock()
 mycontext["cb"] = None 
 
+DHT_EVENT_ERROR = -1 
 DHT_EVENT_SETUP_DONE = 0 
 DHT_EVENT_LOOKUP_DONE = 1
 DHT_EVENT_ANNOUNCE_DONE = 2
@@ -63,14 +64,16 @@ def callback(event, id, data, data_len=0, res=None):
   elif event == DHT_EVENT_VALUE_ITEM:
     output += "Received value item. ID: %s\n" % id 
     mycontext["get"] = True 
+  elif event == DHT_EVENT_ERROR:
+    output += "Incorrect signature for DHT mutable put method.\n"
+    mycontext["put"] = True   # we did not really complete the put, but just to stop the connection
 
   # if we got values for get_peers / get 
   if event == DHT_EVENT_VALUES or event == DHT_EVENT_VALUE_ITEM:
     output += "Data: \n" + str(data) + "\n"
     output += "Response: \n" + str(res) + "\n"
     output += "-------------------------\n"
-    log (output)
-  else:
+  elif not event == DHT_EVENT_ERROR:
     output += "Nodes (%d): \n" % data_len
     for d in data:
       if isinstance(d, tuple):
@@ -79,7 +82,8 @@ def callback(event, id, data, data_len=0, res=None):
         output += d.ip + ": " + str(d.port) + "\n"
 
     output += "-------------------------\n"
-    log (output)
+  
+  log (output)
    
   # log (mycontext["dht"].router)
 
@@ -234,18 +238,24 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, peers=my_peers, keypair=None, my_port=MY_PORT, setup_port=SETUP_PORT):  
+def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=None, my_port=MY_PORT, setup_port=SETUP_PORT):  
   # turn the flag 
   mycontext["put"] = False 
-  key = opts = None 
+  _key = opts = None 
 
   # for immutable items, key is the SHA-1 hash of the value stored 
   # for mutable items, key is already available in the Keypair instance 
   if keypair is None:
-    key = sha.sha_hash(str(value))
+    _key = sha.sha_hash(str(value))
   else:
-    key = keypair.key 
+    if key is None:
+      _key = keypair.key 
+    else:
+      _key = key
     opts = keypair.opts(value)
+
+  log (_key, "\n")
+  log (opts, "\n")
 
   if value is None:
     raise ValueError("DHT Put: value is required.")
@@ -269,7 +279,7 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, keypair=None, my_po
     if not isinstance(opts["seq"], int):
       raise ValueError("Mutable DHT put: sequence number must be an Integer.")
 
-  
+
   if not mycontext["setup"]:
     dhtadvertise_setup(my_id, callback, peers, keypair, setup_port=setup_port)
 
@@ -281,10 +291,10 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, keypair=None, my_po
       # update the dht with the possibly new keypair
       mycontext["dht"].keypair = keypair 
       # 2 for put lookup
-      mycontext["dht"].lookups.dht_lookup(key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      mycontext["dht"].lookups.dht_lookup(_key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
       break 
 
-  return key  # return key for future immutable lookup 
+  return _key  # return key for future immutable lookup 
 
 # Note: the get method does NOT require keypair, even for mutable data 
 def dhtadvertise_get(my_id, key, callback, peers=my_peers, my_port=MY_PORT, setup_port=SETUP_PORT): 

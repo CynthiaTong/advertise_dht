@@ -5,6 +5,7 @@ rpc = dy_import_module("rpc.r2py")
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60 
 LOOKUP_CAPACITY = 14
 
+DHT_EVENT_ERROR = -1 
 DHT_EVENT_SETUP_DONE = 0 
 DHT_EVENT_LOOKUP_DONE = 1
 DHT_EVENT_ANNOUNCE_DONE = 2 
@@ -52,11 +53,12 @@ class DHTLookup:
       self.lookups.append(newest)
 
     newest = self.router.get_lookup_nodes(newest, target_id)
+    # log (newest)
     self.lookup_step(newest, callback, version, my_port)
     # update lookup_time 
     self.lookup_time = getruntime()
 
-  def lookup_step(self, lookup, callback, version, my_port=63101, alpha=14, finished=0):
+  def lookup_step(self, lookup, callback, version, my_port=63101, alpha=3, finished=0):
 
     if lookup.done:
       return self.lookup_finished(lookup, callback)
@@ -105,27 +107,30 @@ class DHTLookup:
       # send alpha get_peers / get requests to nodes we have NOT queried 
       send_count = 0       
       if lookup.port == 1 or lookup.port == 2:
-          for n in lookup.get_nodes():
-            if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-              log ("Sending get to %s: %d\n" %(n.ip, n.port))
-              send_count += self.lookup_get(lookup, n, my_port)
-            if send_count >= alpha:
-              break
+        for n in lookup.get_nodes():
+          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
+            log ("Sending get to %s: %d\n" %(n.ip, n.port))
+            send_count += self.lookup_get(lookup, n, my_port)
+          if send_count >= alpha:
+            break
       else:
         for n in lookup.get_nodes():
-            if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
-              send_count += self.lookup_get_peers(lookup, version, n, my_port)
-            if send_count >= alpha:
-              break
+          if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
+            log ("Sending get_peers to %s: %d\n" %(n.ip, n.port))
+            send_count += self.lookup_get_peers(lookup, version, n, my_port)
+          if send_count >= alpha:
+            break
 
       lookup.step_time = getruntime()
 
   def lookup_finished(self, lookup, callback, values=None, res=None):
-    lookup.done = 1 
-    lookup.step_time = getruntime()
+    # lookup.done = 1 
+    # lookup.step_time = getruntime()
+    self.lookups.remove(lookup)
 
     if callback:
-      event = -1 
+
+      event = DHT_EVENT_ERROR
       if values:
         # # we do not want to find values during setup
         if lookup.port == 0 and lookup.id == self.id:
@@ -143,14 +148,15 @@ class DHTLookup:
         return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes)) 
       elif lookup.port == 1:
         event = DHT_EVENT_GET_DONE
-      else:
+      elif lookup.port == 0:
         if lookup.id == self.id:
           event = DHT_EVENT_SETUP_DONE
         else:
           event = DHT_EVENT_LOOKUP_DONE
 
       return callback(event, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))  
-
+    else:
+      raise Exception("Must provide a callback for DHT operations.")
 
   def lookup_get_peers(self, lookup, version, node, my_port):
     if lookup.done:
@@ -251,8 +257,15 @@ class Lookup:
       else: # node is closer  
         self.list.insert(i, lookup_node)
         if len(self.list) > self.capacity:
-          # just pop the last (furthest) node, whether it has replied or not 
-          self.list.pop()
+          # pop the furthest node that hasn't replied 
+          i = -1     
+          while self.list[i].replied and i > len(self.list) * -1:
+            i -= 1 
+          # in case all have replied
+          if i >= len(self.list) * -1:
+            self.list.pop(i)
+          else:
+            self.list.pop()
         return 
     # if there's room in capacity after looping through self.list, just append new node 
     if len(self.list) < self.capacity:
