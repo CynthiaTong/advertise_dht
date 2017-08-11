@@ -4,6 +4,7 @@ rpc = dy_import_module("rpc.r2py")
 util = dy_import_module("util.r2py")
 sha = dy_import_module("sha.r2py")
 peerfile = dy_import_module("peerfile.r2py")
+dy_import_module_symbols("constants.py")
 log (getruntime(), "\n")
 
 
@@ -22,15 +23,6 @@ mycontext["get"] = False
 
 mycontext["lock"] = createlock()
 mycontext["cb"] = None 
-
-DHT_EVENT_ERROR = -1 
-DHT_EVENT_SETUP_DONE = 0 
-DHT_EVENT_LOOKUP_DONE = 1
-DHT_EVENT_ANNOUNCE_DONE = 2
-DHT_EVENT_VALUES = 3
-DHT_EVENT_GET_DONE = 4 
-DHT_EVENT_PUT_DONE = 5
-DHT_EVENT_VALUE_ITEM = 6 
 
 class DHTNoResponseError(Exception):
   """ Error starting up the DHT """
@@ -65,7 +57,7 @@ def callback(event, id, data, data_len=0, res=None):
     output += "Received value item. ID: %s\n" % id 
     mycontext["get"] = True 
   elif event == DHT_EVENT_ERROR:
-    output += "Incorrect signature for DHT mutable put method.\n"
+    output += "Invalid signature for DHT mutable put method.\n"
     mycontext["put"] = True   # we did not really complete the put, but just to stop the connection
 
   # if we got values for get_peers / get 
@@ -87,7 +79,8 @@ def callback(event, id, data, data_len=0, res=None):
    
   # log (mycontext["dht"].router)
 
-def dhtadvertise_setup(my_id, callback, peers=my_peers, keypair=None, version=None, my_port=MY_PORT, setup_port=SETUP_PORT):
+def dhtadvertise_setup(my_id, callback, peers=my_peers, keypair=None, version=None, my_port=MY_PORT, 
+    setup_port=SETUP_PORT):
   try: 
     mycontext["dht"] = dht_module.DHT(my_id, keypair, version)
     listen = setup_listen(setup_port, callback)
@@ -194,7 +187,8 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
   return listen 
 
 
-def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None, my_port=MY_PORT, 
+    setup_port=SETUP_PORT): 
   # turn the flag 
   mycontext["lookup"] = False 
 
@@ -216,7 +210,8 @@ def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None
   Announce that the peer, controlling the querying node, is downloading a torrent on a port
   If port is not specified, automatically use the source port of the UDP packets 
 """
-def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=MY_PORT, version=None, my_port=MY_PORT, setup_port=SETUP_PORT): 
+def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=MY_PORT, version=None, 
+    my_port=MY_PORT, setup_port=SETUP_PORT): 
   # turn the flag 
   mycontext["announce"] = False 
 
@@ -238,7 +233,8 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
 """
   Value accepted here: any bencoded type (list, dict, string or integer)
 """
-def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=None, my_port=MY_PORT, setup_port=SETUP_PORT):  
+def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=None, 
+    my_port=MY_PORT, setup_port=SETUP_PORT):  
   # turn the flag 
   mycontext["put"] = False 
   _key = opts = None 
@@ -291,7 +287,8 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=N
       # update the dht with the possibly new keypair
       mycontext["dht"].keypair = keypair 
       # 2 for put lookup
-      mycontext["dht"].lookups.dht_lookup(_key, 2, callback, version=None, my_port=my_port, value=value, opts=opts)
+      mycontext["dht"].lookups.dht_lookup(_key, 2, callback, version=None, my_port=my_port, value=value, 
+          opts=opts)
       break 
 
   return _key  # return key for future immutable lookup 

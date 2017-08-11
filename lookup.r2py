@@ -1,18 +1,9 @@
 util = dy_import_module("util.r2py")
 rpc = dy_import_module("rpc.r2py")
-
+dy_import_module_symbols("constants.py")
 
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60 
 LOOKUP_CAPACITY = 14
-
-DHT_EVENT_ERROR = -1 
-DHT_EVENT_SETUP_DONE = 0 
-DHT_EVENT_LOOKUP_DONE = 1
-DHT_EVENT_ANNOUNCE_DONE = 2 
-DHT_EVENT_VALUES = 3
-DHT_EVENT_GET_DONE = 4 
-DHT_EVENT_PUT_DONE = 5
-DHT_EVENT_VALUE_ITEM = 6 
 
 class DHTLookup:
 
@@ -124,9 +115,9 @@ class DHTLookup:
       lookup.step_time = getruntime()
 
   def lookup_finished(self, lookup, callback, values=None, res=None):
-    # lookup.done = 1 
-    # lookup.step_time = getruntime()
-    self.lookups.remove(lookup)
+    lookup.done = 1 
+    lookup.step_time = getruntime()
+    # self.lookups.remove(lookup)
 
     if callback:
 
@@ -339,3 +330,4 @@ class Lookup_Node():
     self.token = token 
     self.token_len = token_len
     self.pinged = 0 
+  

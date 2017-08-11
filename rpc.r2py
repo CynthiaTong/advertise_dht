@@ -3,7 +3,7 @@ util = dy_import_module("util.r2py")
 LOOKUP_CAPACITY = 14 
 DHT_LOOKUP_EXPIRE_TIME = 62 * 60
 DHT_MAX_LOOKUPS = 1024 
-BUF_SIZE = 512 #BYTES 
+BUF_SIZE = 512 
 LARGE_BUF_SIZE = 2048 
 
 
@@ -63,7 +63,8 @@ def get_peers(self_id, ip, port, tid, tid_len, info_hash, my_port=63101, v=None)
     return send(buf, ip, port, my_port)
   return 0 
 
-def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len, my_port=63101, v=None):
+def announce_peer(self_id, ip, port, tid, tid_len, info_hash, lookup_port, token, token_len, 
+    my_port=63101, v=None):
   buf = ("d1:ad2:id20:%s9:info_hash20:%s4:porti%de5:token%d:%se1:q13:announce_peer1:t%d:%s" % 
         (self_id, info_hash, lookup_port, token_len, token, tid_len, tid))
   buf += add_version(v)
@@ -90,9 +91,11 @@ def send_closest_nodes(router, self_id, ip, port, tid, tid_len, target_id_str,
   nodes_str = "".join(nodes_list)
   nodes_len = len(nodes_list) * 26 
 
-  return send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, my_port, v)
+  return send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, 
+      token, token_len, my_port, v)
 
-def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, my_port, v):
+def send_nodes_peers(self_id, ip, port, tid, tid_len, nodes_str, nodes_len, peers_list, token, token_len, 
+    my_port=63101, v=None):
   buf = "d1:rd2:id20:%s" % self_id 
   # add nodes string if no peers_list is provided 
   # either it's a find_node, or no peer values found for get_peers)

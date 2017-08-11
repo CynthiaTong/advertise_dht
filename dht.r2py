@@ -60,7 +60,8 @@ class DHT:
               log ("Put msg stored!\n")
               return rpc.send_put(self.id, source_ip, source_port, msg["t"], my_port)
             else: 
-              return rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Same seq but values different", my_port, self.version_id)
+              return rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Same seq but values different", 
+                  my_port, self.version_id)
 
         elif msg.has_key("q") and msg["q"] == "get":            
           log ("Get req from: %s %d\n" %(source_ip, source_port))
@@ -85,7 +86,8 @@ class DHT:
           else:
             log ("Unknown query.\n", msg)
           if msg.has_key("t"):
-            return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", my_port, self.version_id) 
+            return rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 201, "Unknown query", 
+                my_port, self.version_id) 
 
       # msg is not get/put 
       else:
@@ -121,12 +123,12 @@ class DHT:
               # log ("Got %d values!\n" % (values_len/6))
               lookup = self.lookups.find_lookup_by_tid(lids[0]) 
               filtered_values = list()
-              i = 0 
-              while i < values_len:
+              # i = 0 
+              for i in range(0, values_len, 6):
                 v = values[i:i+6]
                 v_ip = ".".join([str(ord(x)) for x in v[:4]])
                 v_port = util.bytes_to_int(v[4:])  # convert port bytes back to an integer
-                i += 6
+                # i += 6
                 filtered_values.append((v_ip, v_port))
 
               # since we've got values, stop the lookup and return callback
@@ -152,14 +154,14 @@ class DHT:
                   if not (lookup.lookup_done or lookup.done):
                     self.router.add_contact(sender_id, source_ip, source_port, 0) # 0 for reply 
                     # extract nodes info from list 
-                    i = 0 
-                    while i <= len(nodes) - 26:
+                    # i = 0 
+                    for i in range(0, len(nodes), 26):
                       n = nodes[i:i+26]
                       # convert id, ip and port to readable format 
                       n_id = n[:20]
                       n_ip = ".".join([str(ord(x)) for x in n[20:24]])
                       n_port = util.bytes_to_int(n[24:])
-                      i += 26 
+                      # i += 26 
                       # log (n_ip, ": ", n_port, "\n")
                       if n_id == self.id:
                         continue;
@@ -198,7 +200,7 @@ class DHT:
                 try:
                   self.keypair.verify(sig, str(values))
                 except Exception, e:
-                  log ("Invalid signature from get response: %s\n" % e)
+                  log ("Invalid signature from get response: %s\n" % repr(e))
                   # our signature is invalid, return error to callback 
                   lookup.port = -1 
                   return self.lookups.lookup_finished(lookup, callback)
@@ -219,14 +221,14 @@ class DHT:
                   self.router.add_contact(sender_id, source_ip, source_port, 0)   # 0 for reply   
 
                   # extract nodes info from string 
-                  i = 0 
-                  while i <= len(nodes) - 26:
+                  # i = 0 
+                  for i in range(0, len(nodes), 26):
                     n = nodes[i:i+26]
                     # convert id, ip and port to host order and readable format 
                     n_id = n[:20]
                     n_ip = ".".join([str(ord(x)) for x in n[20:24]])
                     n_port = util.bytes_to_int(n[24:])  # convert port bytes back to an integer
-                    i += 26 
+                    # i += 26 
                     if n_id == self.id:
                       continue;
                     self.router.add_contact(n_id, n_ip, n_port, 2) # 2 for arbitrary msgs 
@@ -239,7 +241,7 @@ class DHT:
                   self.lookups.lookup_step(lookup, callback, self.version_id, my_port)
                   # log ("--------- LOOKUP ---------\n", str(lookup))
             except Exception, e:
-              log ("Faulty response to get. Error: %s\n" % e)                
+              log ("Faulty response to get. Error: %s\n" % repr(e))                
 
           elif util.tid_match(tid, "ap") or util.tid_match(tid, "pt"):  
             lids = (util.tid_match(tid, "ap"), util.tid_match(tid, "pt"))
@@ -283,37 +285,43 @@ class DHT:
           log ("Find node!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
           log ("Sending closest node to find_node req.\n")
-          return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target, my_port=my_port, v=self.version_id)
+          return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, target, 
+              my_port=my_port, v=self.version_id)
 
         elif msg_type == "GET_PEERS":
           log ("Get peers!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
           if util.bytes_to_int(info_hash) == 0:
             log ("Got get_peers with no info_hash\n")
-            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", my_port, self.version_id)
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Get_peers with no infohash.", 
+                my_port, self.version_id)
           else:
             peers_list = self.storage.retrieve(info_hash)
             token = util.make_token(source_ip, self.secret_package[1])
             if peers_list:
               log ("Sending found peers.\n")
               return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, 
-                                          token, TOKEN_SIZE, peers_list, my_port=my_port, v=self.version_id)
+                  token, TOKEN_SIZE, peers_list, my_port=my_port, v=self.version_id)
             else:
               log ("Sending nodes for get_peers.\n")
-              return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, my_port=my_port, v=self.version_id)
+              return rpc.send_closest_nodes(self.router, self.id, source_ip, source_port, tid, tid_len, info_hash, 
+                  my_port=my_port, v=self.version_id)
 
         elif msg_type == "ANNOUNCE_PEER":
           log ("Announce peer!\n")
           self.router.add_contact(sender_id, source_ip, source_port, 1) # 1 for msg 
           if util.bytes_to_int(info_hash) == 0:
             log ("Got announce_peer with no info_hash\n")
-            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash", my_port, self.version_id)   
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with no infohash", 
+                my_port, self.version_id)   
           if port == 0:
             log ("Got announce_peer with port 0\n")
-            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number", my_port, self.version_id)   
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with forbidden port number", 
+                my_port, self.version_id)   
           if not util.token_match(token, source_ip, self.secret_package[0], self.secret_package[1]):
             log ("Got announce_peer with invalid token\n")
-            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token", my_port, self.version_id) 
+            rpc.send_error(source_ip, source_port, tid, tid_len, 203, "Announce_peer with invalid token", 
+                my_port, self.version_id) 
 
           self.storage.store(sender_id, source_ip, source_port)
           log ("Sending peer announced.\n")
@@ -345,26 +353,30 @@ class DHT:
       if st is not None:
         # if the put does not have all the required fields for mutable updates, prevent it 
         if not (opts.has_key("k") and opts.has_key("seq") and opts.has_key("sig")):
-          rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Lack mutable attributes", my_port, self.version_id)
+          rpc.send_error(source_ip, source_port, tid, len(tid), 203, "Lack mutable attributes", 
+              my_port, self.version_id)
           return False 
         if opts.has_key("cas") and not opts["cas"] == st["a"]["seq"]:
-          rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", my_port, self.version_id)
+          rpc.send_error(source_ip, source_port, tid, len(tid), 301, "CAS mismatch. Re-read and try again", 
+              my_port, self.version_id)
           return False 
         if opts["seq"] < st["a"]["seq"]:
-          rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", my_port, self.version_id)
+          rpc.send_error(source_ip, source_port, tid, len(tid), 302, "Sequence number less than current", 
+              my_port, self.version_id)
           return False 
         # verify signature
         try:
           self.keypair.verify(opts["sig"], str(value))
         except Exception, e:
-          log ("Invalid Signature: %s\n" % e)
+          log ("Invalid Signature: %s\n" % repr(e))
           rpc.send_error(source_ip, source_port, tid, len(tid), 206, "Invalid Signature", my_port, self.version_id)
           return False 
 
     except Exception, e:
-      log ("Invalid put request! Error: %s\n" % e)
+      log ("Invalid put request! Error: %s\n" % repr(e))
       if msg.has_key("t"):
-        rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 203, "Invalid arguments", my_port, self.version_id) 
+        rpc.send_error(source_ip, source_port, msg["t"], len(msg["t"]), 203, "Invalid arguments", 
+            my_port, self.version_id) 
       return False 
 
     return True 
