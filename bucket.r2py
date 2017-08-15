@@ -1,13 +1,23 @@
+"""
+<Program Name>
+  bucket.r2py
+
+<Author>
+  Cynthia Xin Tong 
+
+<Purpose>
+  The Bucket class of the DHT. 
+"""
 random = dy_import_module("random.r2py")
 node = dy_import_module("node.r2py")
 
 class Bucket:
   """
-    <Purpose>
+  <Purpose>
     Buckets are used to group up nodes in the DHT's Routing Table. 
-    <Side Effects>
+  <Side Effects>
     Used by the RoutingTable module. 
-    <Example Use>
+  <Example Use>
     # create a bucket 
     bucket = Bucket(0, 2**4, 3)
     # add a node to the bucket 
@@ -16,10 +26,10 @@ class Bucket:
     bucket.remove_node(node_obj)
     # split the bucket 
     bucket.split()
-  
   """   
 
   def __init__(self, min, max, ksize):
+    # Note: min is inclusive, max is exclusive.
     self.min = min
     self.max = max
     self.ksize = ksize
@@ -27,28 +37,44 @@ class Bucket:
     self.replacements = list() #should be a stack (set)
     self.last_changed = 0
 
-  """
-    The in_range function takes in one parameter that can be either a Node object 
-    or an integer/long number. 
-    It returns true if the object fits within this bucket's range, false otherwise. 
-    Note: min is inclusive, max is exclusive.
-
-  """
   def in_range(self, *args):
+    """
+    <Purpose>
+      Check if the node or integer falls into this bucket's range. 
+    <Arguments>
+      *args:
+        the argument can be either a Node object or an integer/long number. 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the Routing class to discover the correct bucket.  
+    <Returns> 
+      True if the object fits within this bucket's range, False otherwise. 
+    """
     arg = args[0]
     if isinstance(arg, node.Node):
       return self.min <= arg.long_id < self.max
     elif isinstance(arg, (int, long)):
       return self.min <= arg < self.max 
 
-  """
-    Add a node to the bucket. 
-    If node already exists, update its time info and move it to tail, then return True. 
-    Otherwise node is new, append it, update its time info and return True. 
-    If bucket is full, return False 
-    message_type argument is defaulted to 2 (general type)
-  """
   def add_node(self, node, message_type=2):
+    """
+    <Purpose>
+      Add a node to the bucket. 
+    <Arguments>
+      node:
+        the node to be added
+      message_type (defaulted to 2):
+        the message type of the node (2 stands for general type - not query or reply)
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the Routing class to add new peer contacts.  
+    <Returns> 
+      If node already exists, update its time info and move it to tail, then return True. 
+      Otherwise node is new, append it, update its time info and return True. 
+      If bucket is full, return False 
+    """
     duplicates = None 
     for n in self.nodes:
       if n.ip == node.ip and n.port == node.port:
@@ -69,13 +95,24 @@ class Bucket:
     # log ("NEW NODE ", node.long_id, " ", node.pinged, " ", node.last_queried, " ", node.last_replied ,"\n")
     return True
 
-  """
-    Add a node to the bucket's replacement list (stack). 
-    If node already exists, update its time info and move it to tail (top). 
-    Otherwise node is new, append it and update its time info. 
-    
-  """
   def add_replacement(self, node, message_type):
+    """
+    <Purpose>
+      Add a node to the bucket's replacement list (stack). 
+      If node already exists, update its time info and move it to tail (top). 
+      Otherwise node is new, append it and update its time info. 
+    <Arguments>
+      node:
+        the node to be added to replacements 
+      message_type:
+        the node's message type 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the Routing class to add new replacement node.  
+    <Returns> 
+      None. 
+    """
     # if the node exists in replacements, remove it and add new node to tail 
     for n in self.replacements:
       if n.ip == node.ip and n.port == node.port:
@@ -84,13 +121,13 @@ class Bucket:
     self.replacements.append(node)
     self.update_time_info(node, message_type)
   
-  """
-    Update node's time info based on the message type: 
-    If request (msg_type == 1), update node's last_queried field; 
-    If response (msg_type == 0), update node's replied fields and bucket's last_changed. 
-
-  """
   def update_time_info(self, node, msg_type):
+    """
+    <Purpose>
+      Update node's time info based on the message type: 
+      If request (msg_type == 1), update node's last_queried field; 
+      If response (msg_type == 0), update node's replied fields and bucket's last_changed. 
+    """
     if msg_type:
       node.last_queried = getruntime()
     else:
@@ -100,12 +137,21 @@ class Bucket:
       # node replied, update bucket last_changed  
       self.last_changed = getruntime()
 
-  """
-    Remove a node from bucket. If node does not exist, return False. 
-    Otherwise, remove the node, and try adding a good node from the replacement stack, return True. 
-    
-  """
   def remove_node(self, node):
+    """
+    <Purpose>
+      Remove a node from bucket.
+    <Arguments>
+      node:
+        the node to be removed from bucket  
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the Routing class to remove node contacts.  
+    <Returns> 
+      If node does not exist, return False. 
+      Otherwise, remove the node, and try adding a good node from the replacement stack, return True. 
+    """
     existing_node = None 
     for n in self.nodes:
       if n.ip == node.ip and n.port == node.port:
@@ -126,12 +172,20 @@ class Bucket:
         break 
     return True
 
-  """
-    Split the bucket into two buckets with halfs of the original range. 
-    Populate the new buckets with existing nodes, and return the two buckets. 
-
-  """
   def split(self):
+    """
+    <Purpose>
+      Split the bucket into two buckets with halfs of the original range, and 
+      populate the new buckets with existing nodes. 
+    <Arguments>
+      None. 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Called by the Routing class to split buckets.  
+    <Returns> 
+      The two newly populated buckets from the split.  
+    """
     if self.min >= self.max:
       log("Cannot split bucket: min >= max")
       return
@@ -150,41 +204,47 @@ class Bucket:
 
     return bucket_1, bucket_2
 
-  """
-    Getter for all nodes in this bucket 
-  """
   def get_nodes(self):
+    """
+    <Purpose>
+      Getter for all nodes in this bucket 
+    """
     return self.nodes
 
-  """
-    Return the number of nodes in this bucket 
-  """
   def node_count(self):
+    """
+    <Purpose>
+      Return the number of nodes in this bucket 
+    """
     return len(self.nodes)
 
-  """
-    Return oldest node in this bucket (at index 0 of node list)
-  """
   def get_oldest(self):
+    """
+    <Purpose>
+      Return oldest node in this bucket (at index 0 of node list)
+    """
     return self.nodes[0]
 
-  """
-    Return a random integer value within the bucket's range 
-  """
   def random_id(self):
+    """
+    <Purpose>
+      Return a random integer value within the bucket's range 
+    """
     return random.random_randint(self.min, self.max)
 
-  """
-    Return a random node within the bucket 
-  """
   def random_node(self):
+    """
+    <Purpose>
+      Return a random node within the bucket 
+    """
     n = random.random_int_below(len(self.nodes))
     return self.nodes[n]
 
-  """
-    String representation of the bucket 
-  """
   def __str__(self):
+    """
+    <Purpose>
+      String representation of the bucket 
+    """
     output = "Bucket last changed: %.2f\n" % self.last_changed
     for n in self.nodes:
       output += str(n) + "\n"

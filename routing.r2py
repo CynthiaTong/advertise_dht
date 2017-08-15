@@ -1,12 +1,12 @@
 """
 <Program Name>
-  routing.py
+  routing.r2py
 
 <Author>
   Cynthia Xin Tong 
 
 <Purpose>
-  Contains the RoutingTable class needed for the DHT. 
+  The RoutingTable class of the DHT. 
 """
 
 node = dy_import_module("node.r2py")
