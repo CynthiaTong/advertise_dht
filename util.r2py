@@ -1,4 +1,3 @@
-time = dy_import_module("time.r2py")
 sha = dy_import_module("sha.r2py")
 random = dy_import_module("random.r2py")
 
