@@ -1,3 +1,14 @@
+"""
+<Program Name>
+  node.r2py
+
+<Author>
+  Cynthia Xin Tong 
+
+<Purpose>
+  The Node class of the DHT. 
+"""
+
 util = dy_import_module("util.r2py")
 
 class Node:
@@ -15,7 +26,6 @@ class Node:
     node.compare_distance(node_1, node_2)
     # see if this node is a "good node"
     node.good_node()
-  
   """
 
   def __init__(self, id, ip, port):
@@ -29,41 +39,64 @@ class Node:
     self.pinged = 0 
     self.last_pinged = 0 
 
-  """
-    Return the XOR distance between this node and another node 
-  """
   def distance_to(self, node):
+    """
+    <Purpose>
+      Return the XOR distance between this node and another node 
+    """
     return self.long_id ^ node.long_id
 
-  """
-    Compares the XOR distance from this node to two other nodes.
-    Returns: 
-      - a positive integer representing (distance to node_1 - distance to node_2)
-      - 0 if distances are equal 
-      - a negative integer representing (distance to node_1 - distance to node_2)
-  """
   def compare_distance(self, node_1, node_2):
+    """
+    <Purpose>
+      Compares the XOR distance from this node to two other nodes.
+    <Arguments>
+      node_1:
+        one node whose distance to this node is calculated for comparison
+      node_2:
+        another node whose distance to this node is calculated for comparison
+    <Exceptions>
+      N/A
+    <Side Effects>
+      None. 
+    <Returns> 
+      A positive integer representing (distance to node_1 - distance to node_2)
+      0 if distances are equal 
+      A negative integer representing (distance to node_1 - distance to node_2) 
+    """
     return self.distance_to(node_1) - self.distance_to(node_2)
 
-  """
-    BitTorrent defination of a good node: 
-    - pinged less than 3 times 
-    - replied in the last 15 minutes or ever replied, and queried in the last 15 minutes 
-    Note: we might need to customize this definition for our own DHT 
-  """
   def good_node(self):
+    """
+    <Purpose>
+      Checks if this node count as a "good" node. 
+      BitTorrent defination of a good node: 
+        - pinged less than 3 times 
+        - replied in the last 15 minutes or ever replied, and queried in the last 15 minutes 
+      Note: we might need to customize this definition for our own DHT 
+    <Arguments>
+      None. 
+    <Exceptions>
+      N/A
+    <Side Effects>
+      Used by the Bucket and Routing class. 
+    <Returns> 
+      True if node is good, False otherwise. 
+    """
     return (self.pinged < 3 and       
             (self.last_replied > getruntime() - 60*15 or   
             (self.replied and self.last_queried > getruntime() - 60*15)))
 
-  """
-    List representation of this node 
-  """
   def __repr__(self): 
+    """
+    <Purpose>
+      List representation of this node 
+    """
     return repr([self.id, self.ip, self.port])
 
-  """
-    String representation of this node 
-  """
   def __str__(self):
+    """
+    <Purpose>
+      String representation of this node 
+    """
     return "%s %s:%s" % (self.id, self.ip, str(self.port))
