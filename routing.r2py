@@ -2,6 +2,9 @@
 <Program Name>
   routing.py
 
+<Author>
+  Cynthia Xin Tong 
+
 <Purpose>
   Contains the RoutingTable class needed for the DHT. 
 """
@@ -33,27 +36,32 @@ class RoutingTable:
     self.expire_stuff_time = 0  
     self.initial_bucket()
 
-  """
-    Initialize the first bucket in this Routing Table. 
-    Integer id range: [0, 2^160), which can represent any 20-byte string ids. 
-  """
+
   def initial_bucket(self):
+    """
+    <Purpose>
+      Initialize the first bucket in this Routing Table. 
+      Integer id range: [0, 2^160), which can represent any 20-byte string ids. 
+    """
     self.buckets = [bucket.Bucket(0, 2**160, self.ksize)]
 
-  """
-    Split the bucket at a certain index in our bucket list. 
-  """
   def split_bucket(self, index, bucket):
+    """
+    <Purpose>
+      Split the bucket at a certain index in our bucket list. 
+    """
     # Ping the node at the top of the bucket's replacement list 
     self.ping_replacement(bucket)
     bucket_1, bucket_2 = bucket.split()
     self.buckets[index] = bucket_1 
     self.buckets.insert(index + 1, bucket_2)
 
-  """
-    Purge bad nodes whose pinged value >= 4 in all buckets 
-  """
+
   def expire_buckets(self):
+    """
+    <Purpose>
+      Purge bad nodes whose pinged value >= 4 in all buckets 
+    """
     for b in self.buckets:
       for n in b.nodes:
         if n.pinged >= 4:
@@ -68,7 +76,6 @@ class RoutingTable:
     <Purpose>
       Add a contact to this routing table, and updates its timing info based on 
       its message type. 
-     
     <Arguments>
       sender_id:
         the sender peer's id 
@@ -132,18 +139,16 @@ class RoutingTable:
     # node is not added (it might be added to replacement instead), return False 
     return False 
 
-  """
-    Return all nodes in this routing table. 
-  """
   def get_all_nodes(self):
+    """
+    <Purpose>
+      Return all nodes in this routing table. 
+    """
     nodes = list()
     for b in self.buckets:
       nodes += b.get_nodes()
     return nodes 
 
-  """
-    Return a list of buckets that haven't been queried in 3 minutes (to refresh)
-  """
   def get_unvisited_buckets(self):
     """
     <Purpose>
@@ -208,21 +213,23 @@ class RoutingTable:
 
     return refreshed
 
-  """
-    Given a target id, return the node with that id or return None if node does not exist 
-  """
   def find_node(self, target_id):
+    """
+    <Purpose>
+      Given a target id, return the node with that id or return None if node does not exist.
+    """
     i, bucket = self.find_bucket(target_id)
     for n in bucket.get_nodes():
       if n.id == target_id:
         return n 
     return None 
 
-  """
-    Given a node instance or an integer id number, find the bucket which the node/id falls into. 
-    Return index in the bucket list and the bucket itself 
-  """
   def find_bucket(self, *args):
+    """
+    <Purpose>
+      Given a node instance or an integer id number, find the bucket which the node/id falls into. 
+      Return index in the bucket list and the bucket itself 
+    """
     arg = args[0]
     if not (isinstance(arg, node.Node) or isinstance(arg, (int, long))):
       raise TypeError("Cannot find bucket for types other than node and integer - Type %s\n" % type(arg))
@@ -232,11 +239,12 @@ class RoutingTable:
     # if unable to find a proper bucket, the parameter is out of our range 
     raise ValueError("Node ID not in range: 0 - 2**160")
 
-  """
-    Return a formatted list of closest nodes. 
-    The node id, ip and port info are formatted to a string for sending as part of a RPC message 
-  """
   def insert_closest_node(self, nodes_list, target_id, node):
+    """
+    <Purpose>
+      Return a formatted list of closest nodes. 
+      The node id, ip and port info are formatted to a string for sending as part of a RPC message 
+    """
     i = 0 
     while i < len(nodes_list):
       i_id = nodes_list[i][:20]
@@ -289,7 +297,7 @@ class RoutingTable:
   def get_lookup_nodes(self, lookup, target_id):
     """
     <Purpose>
-      Get nodes for a specific lookup 
+      Get nodes for a specific lookup
     <Arguments>
       lookup:
         the lookup object we are getting the nodes for 
@@ -330,20 +338,22 @@ class RoutingTable:
     # Note: closest in this list at head 
     return lookup
 
-  """
-    An alternative approach to get nodes for lookup is linear scan through the table and add, 
-    this might be more efficient, but it's not specified by BitTorrent or the original Kademlia paper. 
-  """
   # def get_lookup_nodes(self, lookup, target_id):
+    """
+    <Purpose>
+      An alternative approach to get nodes for lookup is linear scan through the table and add, 
+      this might be more efficient, but it's not specified by BitTorrent or the original Kademlia paper. 
+    """
   #   for b in self.buckets:
   #     for n in b.get_nodes():
   #       lookup.insert(n.id, n.ip, n.port) 
   #   return lookup 
 
-  """
-    Helper for adding nodes inside a bucket to a lookup 
-  """
   def add_to_lookup(self, bucket, lookup):
+    """
+    <Purpose>
+      Helper for adding nodes inside a bucket to a lookup.
+    """
     nodes = bucket.get_nodes()
     for n in nodes:
       lookup.insert(n.id, n.ip, n.port) 
@@ -373,20 +383,22 @@ class RoutingTable:
       else:
         self.ping_replacement(self.find_bucket(node)[1])
 
-  """
-    Ping the top node in a bucket's replacement list 
-  """
   def ping_replacement(self, bucket):
+    """
+    <Purpose>
+      Ping the top node in a bucket's replacement list.
+    """
     tid = util.make_tid("pn", util.make_lid())
     if len(bucket.replacements) > 0:
       top = bucket.replacements[-1]
       log ("Sending ping to replacement node.\n")
       rpc.ping(self.id, top.ip, top.port, tid, len(tid), v=self.version_id)
 
-  """
-    String representation of the routing table 
-  """
   def __str__(self):
+    """
+    <Purpose>
+      String representation of the routing table.
+    """
     output = ""
     for b in self.buckets:
       output += "----------\n" + str(b) + "\n"

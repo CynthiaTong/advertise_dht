@@ -1,3 +1,14 @@
+"""
+<Program Name>
+  util.py
+
+<Author>
+  Cynthia Xin Tong 
+
+<Purpose>
+  Important utility functions for the DHT. 
+"""
+
 sha = dy_import_module("sha.r2py")
 random = dy_import_module("random.r2py")
 
@@ -5,16 +16,39 @@ LID_BIT_SIZE = 16
 ROTATE_SECRET_INTERVAL = 5 * 60   # rotate secret every 5 minutes 
 SECRET_SIZE = 8
 
-# generate random 20 bytes for use as a DHT node id 
 def random_id():
+  """
+  <Purpose>
+    Generate random 20 bytes for use as a DHT node id. Same as calling random_randombytes
+    of the random module with a parameter 20. 
+  """
   return random.random_randombytes(20)
 
-# generate a 2-byte (16 bit) lookup id (lid)
 def make_lid():
+  """
+  <Purpose>
+    Generate a 2-byte lookup id (lid). Same as calling random_nbit_int of the random module 
+    with a parameter of LID_BIT_SIZE (8)
+  """
   return random.random_nbit_int(LID_BIT_SIZE)
 
-# generate a 4-byte transaction id string  
 def make_tid(prefix, sequence):
+  """
+  <Purpose>
+    Generate a 4-byte transaction id string from a prefix and a Integer sequence number. 
+  <Arguments>
+    prefix:
+      prefixes are 2-character long; they are short for different types of transactions. 
+      for example, "pn" stands for ping. 
+    sequence:
+      a 2-byte Integer value used to make the tid. could be made with the make_lid function 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by DHT classes to make transaction ids when sending messages. 
+  <Returns> 
+    The transaction id made from the prefix and sequence number. 
+  """
   output = ""
   for n in prefix:
     output += chr(ord(n) & 0xFF) 
@@ -24,9 +58,20 @@ def make_tid(prefix, sequence):
 def tid_match(tid, prefix):
   """
   <Purpose>
-    check if transaction id (tid) matches a certain 2-character prefix (for example, "fn" for find_node)
+    Check if transaction id (tid) matches a certain 2-character prefix (for example, "fn" for find_node)
     return the sequence taken from tid if matches, else return False 
-
+  <Arguments>
+    tid:
+      the transaction id we want to check for match 
+    prefix:
+      prefixes are 2-character long; they are short for different types of transactions. 
+      for example, "pn" stands for ping. 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to check for matching tids.
+  <Returns> 
+    The rest of the tid (except for the prefix) if the given tid has the prefix, False otherwise. 
   """
   if len(tid) > 2 and tid[0] == chr(ord(prefix[0]) & 0xFF) and tid[1] == chr(ord(prefix[1]) & 0xFF):
     return tid[2:]
@@ -36,9 +81,17 @@ def tid_match(tid, prefix):
 def rotate_secret(secret=None):
   """
   <Purpose>
-    Generate and rotate our DHT secret
-    tokens are rotated every 5 min; tokens up to 10 min old are accepted 
-    return the old secret, the newly generated secret, and next rotate time 
+    Generate and rotate our DHT secret.
+    Tokens are rotated every 5 min; tokens up to 10 min old are accepted 
+  <Arguments>
+    secret (default to None):
+      existing DHT secret
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to update its secret. 
+  <Returns> 
+    A tuple containing the old secret, the newly generated secret, and next rotate time 
   """
   old_secret = None  
   if secret:
@@ -49,17 +102,45 @@ def rotate_secret(secret=None):
 
   return (old_secret, secret, rotate_secret_time)
 
-# generate 16-byte tokens by sha-1 hashing ip concatenated with secret 
 def make_token(ip, secret):
+  """
+  <Purpose>
+    Generate 16-byte DHT tokens. 
+  <Arguments>
+    ip:
+      the ip address used to make the token 
+    secret:
+      our secret used to make the token 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to make token for transactions. 
+  <Returns> 
+    The SHA-1 hash of ip concatenated by secret 
+  """
   return sha.sha_hash(str(ip) + secret)
 
 
 def token_match(token, ip, old_secret, secret):
   """
   <Purpose>
-    check if token matches our ip and secret. 
+    check if a given token matches ip and our secret.  
     Note: both secret and old_secret are checked 
-    If match, return True, otherwise return False 
+  <Arguments>
+    token:
+      the token to be checked for match 
+    ip:
+      the ip address that token should use if it's a match 
+    old_secret:
+      our old secret that might have been used to generate token 
+    secret:
+      our current secret that might have been used to generate token  
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to check for token match. 
+  <Returns> 
+    True if match, False otherwise 
   """
   if old_secret:
     old_hash = sha.sha_hash(str(ip) + old_secret)
@@ -72,21 +153,49 @@ def token_match(token, ip, old_secret, secret):
 
   return False 
 
-# get the XOR distance between two numbers 
 def xor_distance(num1, num2):
+  """
+  <Purpose>
+    Get the XOR distance between two numbers.
+  """
   return num1 ^ num2 
-
 
 def compare_distance(target, num1, num2):
   """
   <Purpose>
     compare the XOR distances between target and two other numbers  
-    if positive, distance from num1 is greater than distance from num2 
+  <Arguments>
+    target:
+      the Integer target to which XOR distances are compared 
+    num1:
+      an Integer number whose distance to target is calculated for comparison 
+    num2:
+      another Integer number whose distance to target is calculated for comparison  
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the Lookup class to compare XOR distances for inserting. 
+  <Returns> 
+    A positive integer if distance from num1 is greater than distance from num2, 
+    0 if distances are equal, 
+    A negative integer if distance from num1 is less than distance from num2.
   """
   return xor_distance(target, num1) - xor_distance(target, num2)
 
-# convert the dot-seperated ip string to a 4-byte string 
 def ip_as_bytes(ip):
+  """
+  <Purpose>
+    Compress the dot-seperated ip string to a 4-byte string.
+  <Arguments>
+    ip:
+      the readable dot-seperated ip address to be converted 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the Routing class compress ip addresses for sending messages. 
+  <Returns> 
+    The compressed 4-byte ip string. 
+  """
   ip_as_bytes = ''.join(map(chr,map(int,ip.split('.'))))
   return ip_as_bytes
 
@@ -99,8 +208,8 @@ def int_to_bytes(long_int):
     Used by random_randombytes, random_randombytes is responsible
     for padding any required binary zeroes that are lost in the
     conversion process.
+    Note: this function is taken directly from the random module (_random_long_to_bytes) 
   """
-
   long_int = long(long_int)
   byte_string = ''
   temp_int = 0
@@ -124,8 +233,20 @@ def int_to_bytes(long_int):
 
   return byte_string
 
-# convert an iterable collection of bytes to integer 
 def bytes_to_int(bytes):
+  """
+  <Purpose>
+    Convert an string of bytes to an Integer. 
+  <Arguments>
+    bytes:
+      the byte string that is to be converted to an Integer. 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to convert port numbers back to Int. 
+  <Returns> 
+    The Integer representation of the bytes value. 
+  """
   n = 0
   # read from bytes and add to n 
   for b in bytes:
@@ -133,10 +254,17 @@ def bytes_to_int(bytes):
   return n
 
 def swap_endianess(num):
+  """
+  <Purpose>
+    Swap the endianess of a number (host to byte or byte to host)
+  """
   return ((num & 0xFF) << 8) | ((num & 0xFF00) >> 8)
 
-# check if string length exceeds a certain max. 
 def length_check(index, length, buf_len):
+  """
+  <Purpose>
+    Check if string length exceeds a certain maximum 
+  """
   if index + length > buf_len:
     log ("Failed length check.\n")
     return False 
@@ -145,20 +273,28 @@ def length_check(index, length, buf_len):
 def parse_message(buf, tid_len=8, token_len=20, nodes_len=16*26, values_len=16*6): 
   """
   <Purpose>
-    parse incoming rpc messages. 
-    some constraints: 
-      Max tid length: 8 
-      Max token length: 20 
-      Max number of nodes to receive: 16 
-      Max number of peers to receive: 16 
-
-  <Returns>
-    A tuple containing a collection of parsed information, or in the case of 
-    GET/PUT, return the decoded message directly 
-
-  <Note>
+    Parse incoming rpc messages. 
+    Note:
     This method is adapted from jech's DHT implementation at https://github.com/jech/dht
-    Note: A "cleaner" and possibly more efficient way is to use our own decoder method for all messages 
+    A "cleaner" and possibly more efficient way is to use our own decoder method for all messages 
+  <Arguments>
+    buf:
+      the original, Bencoded rpc message 
+    tid_len: 
+      maximum tid length, defaulted to 8 
+    token_len:
+      maximum token length, defaulted to 20 
+    nodes_len:
+      maximum length of nodes string to receive, defaulted to 16 * 26 
+    values_len:
+      maximum length of values string to receive, defaulted to 16 * 6 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to parse all incoming messages. 
+  <Returns>
+    A tuple containing a collection of parsed information, or in the case of GET/PUT, 
+    the decoded message is returned directly 
   """
 
   buf_len = len(buf)
@@ -325,6 +461,15 @@ def invalid_address(ip, port):
     validate the given address (ip, port pair)
     the address is invalid if:
     port is 0, ip starts with 0, 127, or a number greater than 224. 
+  <Arguments>
+    ip, port:
+      the ip and port to check validity 
+  <Exceptions>
+    N/A 
+  <Side Effects>
+    Called by the DHT class to check on messages' source ip and port. 
+  <Returns>
+    True if ip and port is valid, False otherwise. 
   """
   ip_list = [int(n) for n in ip.split(".")]
   if port == 0 or ip[0] == "0" or ip_list[0] == 127 or ip_list[0] > 224:
@@ -336,10 +481,21 @@ def encoder(obj):
   """
   <Purpose>
     Bencode encode method. 
-
     Note: 
     The Bencode encoder and decoder functions here are inspired by: 
     Utku Demir's bencoder at https://github.com/utdemir/bencoder/
+  <Arguments>
+    obj:
+      the object that will be encoded. 
+      allowed type: int, str, list and dict.  
+  <Exceptions>
+    ValueError 
+      if the obj parameter is not one of the allowed type, or if the obj is a dict 
+      with a non-string key in it. 
+  <Side Effects>
+    Called by the RPC class to encode GET/PUT messages. 
+  <Returns>
+    The bencoded string.  
   """
 
   if isinstance(obj, int):
@@ -372,10 +528,18 @@ def decoder(s):
   """
   <Purpose>
     Bencode decode method. 
-
     Note: 
     The Bencode encoder and decoder functions here are inspired by: 
     Utku Demir's bencoder at https://github.com/utdemir/bencoder/
+  <Arguments>
+    s:
+      the bencoded string that will be decoded. 
+  <Exceptions>
+    N/A
+  <Side Effects>
+    Called by the DHT class to decode GET/PUT messages. 
+  <Returns>
+    The decoded object.  
   """
   
   if not isinstance(s, str):
@@ -429,3 +593,4 @@ def decoder(s):
     log ("Malformed input. i: %d/%d\n" %(i, len(s)))
 
   return return_val 
+  
