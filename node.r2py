@@ -3,10 +3,10 @@
   node.r2py
 
 <Author>
-  Cynthia Xin Tong 
+  Cynthia Xin Tong
 
 <Purpose>
-  The Node class of the DHT. 
+  The Node class of the DHT.
 """
 
 util = dy_import_module("util.r2py")
@@ -14,15 +14,15 @@ util = dy_import_module("util.r2py")
 class Node:
   """
     <Purpose>
-    Nodes stores peer information. It's the basic data unit in a Bucket. 
+    Nodes stores peer information. It's the basic data unit in a Bucket.
     <Side Effects>
-    Used by the Bucket Module.  
+    Used by the Bucket Module.
     <Example Use>
-    # create a node  
+    # create a node
     node = Node(<20-byte id string>, <ip address string>, <integer port number>)
-    # get the XOR distance from another node 
+    # get the XOR distance from another node
     node.distance_to(node_obj)
-    # compare distance from two other nodes 
+    # compare distance from two other nodes
     node.compare_distance(node_1, node_2)
     # see if this node is a "good node"
     node.good_node()
@@ -33,16 +33,16 @@ class Node:
     self.long_id = util.bytes_to_int(self.id)
     self.ip = ip
     self.port = port
-    self.replied = 0 
-    self.last_replied = 0 
-    self.last_queried = 0 
-    self.pinged = 0 
-    self.last_pinged = 0 
+    self.replied = 0
+    self.last_replied = 0
+    self.last_queried = 0
+    self.pinged = 0
+    self.last_pinged = 0
 
   def distance_to(self, node):
     """
     <Purpose>
-      Return the XOR distance between this node and another node 
+      Return the XOR distance between this node and another node
     """
     return self.long_id ^ node.long_id
 
@@ -58,45 +58,45 @@ class Node:
     <Exceptions>
       N/A
     <Side Effects>
-      None. 
-    <Returns> 
+      None.
+    <Returns>
       A positive integer representing (distance to node_1 - distance to node_2)
-      0 if distances are equal 
-      A negative integer representing (distance to node_1 - distance to node_2) 
+      0 if distances are equal
+      A negative integer representing (distance to node_1 - distance to node_2)
     """
     return self.distance_to(node_1) - self.distance_to(node_2)
 
   def good_node(self):
     """
     <Purpose>
-      Checks if this node count as a "good" node. 
-      BitTorrent defination of a good node: 
-        - pinged less than 3 times 
-        - replied in the last 15 minutes or ever replied, and queried in the last 15 minutes 
-      Note: we might need to customize this definition for our own DHT 
+      Checks if this node count as a "good" node.
+      BitTorrent defination of a good node:
+        - pinged less than 3 times
+        - replied in the last 15 minutes or ever replied, and queried in the last 15 minutes
+      Note: we might need to customize this definition for our own DHT
     <Arguments>
-      None. 
+      None.
     <Exceptions>
       N/A
     <Side Effects>
-      Used by the Bucket and Routing class. 
-    <Returns> 
-      True if node is good, False otherwise. 
+      Used by the Bucket and Routing class.
+    <Returns>
+      True if node is good, False otherwise.
     """
-    return (self.pinged < 3 and       
-            (self.last_replied > getruntime() - 60*15 or   
+    return (self.pinged < 3 and
+            (self.last_replied > getruntime() - 60*15 or
             (self.replied and self.last_queried > getruntime() - 60*15)))
 
-  def __repr__(self): 
+  def __repr__(self):
     """
     <Purpose>
-      List representation of this node 
+      List representation of this node
     """
     return repr([self.id, self.ip, self.port])
 
   def __str__(self):
     """
     <Purpose>
-      String representation of this node 
+      String representation of this node
     """
     return "%s %s:%s" % (self.id, self.ip, str(self.port))

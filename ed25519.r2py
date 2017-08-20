@@ -74,7 +74,7 @@ def _sha_bytelist2longlongBigEndian(list):
 
 
 ################################
-# sha512.py 
+# sha512.py
 ################################
 
 def new(m=None):
@@ -109,16 +109,16 @@ class sha512(object):
   block_size = 128
   digest_size = 64
 
-  def __init__(self, m=None):       
+  def __init__(self, m=None):
     self._buffer = ''
     self._counter = 0
-    self.m = m 
+    self.m = m
 
     if m is not None:
       if type(m) is not str:
         raise TypeError, 'argument 1 must be string, not %s' % (type(m))
       self.update(m)
-     
+
   def _rotr(self, x, y):
       return ((x >> y) | (x << (64-y))) & 0xFFFFFFFFFFFFFFFF
 
@@ -126,16 +126,16 @@ class sha512(object):
   def _sha512_process(self, chunk):
 
     w = [0]*80
-    # w[0:16] = struct.unpack('!16Q', chunk)  # long long 
+    # w[0:16] = struct.unpack('!16Q', chunk)  # long long
     w[0:16] = _sha_bytelist2longlongBigEndian(chunk)
-   
+
     for i in range(16, 80):
       s0 = self._rotr(w[i-15], 1) ^ self._rotr(w[i-15], 8) ^ (w[i-15] >> 7)
       s1 = self._rotr(w[i-2], 19) ^ self._rotr(w[i-2], 61) ^ (w[i-2] >> 6)
       w[i] = (w[i-16] + s0 + w[i-7] + s1) & 0xFFFFFFFFFFFFFFFF
- 
+
     a,b,c,d,e,f,g,h = self._h
-   
+
     for i in range(80):
       s0 = self._rotr(a, 28) ^ self._rotr(a, 34) ^ self._rotr(a, 39)
       maj = (a & b) ^ (a & c) ^ (b & c)
@@ -143,7 +143,7 @@ class sha512(object):
       s1 = self._rotr(e, 14) ^ self._rotr(e, 18) ^ self._rotr(e, 41)
       ch = (e & f) ^ ((~e) & g)
       t1 = h + s1 + ch + self._k[i] + w[i]
-     
+
       h = g
       g = f
       f = e
@@ -152,22 +152,22 @@ class sha512(object):
       c = b
       b = a
       a = (t1 + t2) & 0xFFFFFFFFFFFFFFFF
-       
+
     self._h = [(x+y) & 0xFFFFFFFFFFFFFFFF for x,y in zip(self._h, [a,b,c,d,e,f,g,h])]
-     
+
   def update(self, m):
     if not m:
       return
     if type(m) is not str:
       raise TypeError, 'argument 1 must be string, not %s' % (type(m))
-   
+
     self._buffer += m
     self._counter += len(m)
 
     while len(self._buffer) >= 128:
       self._sha512_process(self._buffer[:128])
       self._buffer = self._buffer[128:]
-  
+
   def digest(self):
     mdi = self._counter & 0x7F
     length = _sha_long2bytesBigEndian(self._counter<<3, thisblocksize=8)
@@ -176,7 +176,7 @@ class sha512(object):
       padlen = 111-mdi
     else:
       padlen = 239-mdi
-  
+
     r = new(self.m)
     # log (len('\x80'+('\x00'*(padlen+8))+length), "\n")
     r.update('\x80'+('\x00'*(padlen+8))+length)
@@ -192,7 +192,7 @@ class sha512(object):
 
 
 ################################
-# basic.py 
+# basic.py
 ################################
 
 Q = 2**255 - 19
@@ -272,7 +272,7 @@ def scalarmult_element_safe_slow(pt, n):
     return xform_affine_to_extended((0,1))
   _ = double_element(scalarmult_element_safe_slow(pt, n>>1))
   if n&1:
-    return add_elements(_, pt) 
+    return add_elements(_, pt)
   else:
     return _
 
@@ -305,8 +305,8 @@ def scalarmult_element(pt, n): # extended->extended
   if n==0:
     return xform_affine_to_extended((0,1))
   _ = double_element(scalarmult_element(pt, n>>1))
-  if n&1: 
-    return _add_elements_nonunfied(_, pt)  
+  if n&1:
+    return _add_elements_nonunfied(_, pt)
   else:
     return _
 
@@ -365,7 +365,7 @@ def random_scalar(entropy_f): # 0..L-1 inclusive
   return oversized % L
 
 def password_to_scalar(pw):
-  oversized = new(pw).digest() 
+  oversized = new(pw).digest()
   return int(oversized, 16) % L
 
 def scalar_to_bytes(y):
@@ -472,12 +472,12 @@ _zero_bytes = Zero.to_bytes()
 
 
 def arbitrary_element(seed): # unknown DL
-  hseed = new(seed).digest() 
+  hseed = new(seed).digest()
   y = int(hseed, 16) % Q
 
   # we try successive Y values until we find a valid point
-  plus = 0 
-  while True: 
+  plus = 0
+  while True:
     y_plus = (y + plus) % Q
     x = xrecover(y_plus)
     Pa = [x,y_plus] # no attempt to use both "positive" and "negative" X
@@ -485,7 +485,7 @@ def arbitrary_element(seed): # unknown DL
     # only about 50% of Y coordinates map to valid curve points (I think
     # the other half give you points on the "twist").
     if not isoncurve(Pa):
-      plus += 1 
+      plus += 1
       continue
 
     P = ElementOfUnknownGroup(xform_affine_to_extended(Pa))
@@ -521,7 +521,7 @@ def arbitrary_element(seed): # unknown DL
     # multiplying by 8 will get us to the identity (Zero), which we check
     # for explicitly.
     if is_extended_zero(P8.XYTZ):
-      plus += 1 
+      plus += 1
       continue
 
     # Test that we're finally in the right group. We want to scalarmult
@@ -554,11 +554,11 @@ def bytes_to_element(bytes):
 
 
 ################################
-# eddsa.py 
+# eddsa.py
 ################################
 
 def H(m):
-    return new(m).digest() 
+    return new(m).digest()
 
 def eddsa_publickey(seed):
     assert len(seed) == 32
@@ -621,7 +621,7 @@ def verify(vkbytes, sig, msg):
     return True
 
 ################################
-# _ed25519.py 
+# _ed25519.py
 ################################
 
 # adapt pure25519/ed25519.py to behave like (C/glue) ed25519/_ed25519.py, so
@@ -687,7 +687,7 @@ def ed25519_open(sigmsg, vk):
 
 
 ################################
-# ed25519_oop.py 
+# ed25519_oop.py
 ################################
 
 def create_keypair():

@@ -12,7 +12,7 @@ class GeneralPeerFileError(Exception):
 def import_peers(filename):
   try:
     peerfile = openfile(filename, False)
-    
+
     content = peerfile.readat(None, 0)
     lines = content.split("\n")
     peers = list()
@@ -22,8 +22,8 @@ def import_peers(filename):
         peers.append(items)
 
     peerfile.close()
-    return peers 
-  except FileNotFoundError: 
+    return peers
+  except FileNotFoundError:
     raise NonexistingPeerFileError("Peer file %s does not exist." % filename)
   except Exception, e:
     raise GeneralPeerFileError("Error importing from peer file %s, %s" % (filename, repr(e)))
@@ -31,22 +31,22 @@ def import_peers(filename):
 def export_peers(peerslist, filename):
   if len(peerslist) == 0:
     log ("No peers to export.\n")
-    return 
+    return
 
-  # might not need this, if we're only exporting on shutdown 
+  # might not need this, if we're only exporting on shutdown
   # if getruntime() < export_peers_time:
   #   log ("Haven't reached export time. No peers exported.\n")
 
   peerfile = openfile(filename, True)
-  
-  offset = 0 
-  numpeers = 0 
+
+  offset = 0
+  numpeers = 0
   for l in peerslist:
     peerfile.writeat(l, offset)
     offset += len(l)
-    numpeers += 1 
+    numpeers += 1
     if numpeers >= MAXPEERS:
-      break 
+      break
 
   peerfile.close()
-  return numpeers 
+  return numpeers

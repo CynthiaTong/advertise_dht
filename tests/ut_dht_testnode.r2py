@@ -1,5 +1,5 @@
 """
-  <Purpose> Test DHT Node class properties and methods 
+  <Purpose> Test DHT Node class properties and methods
 """
 
 node = dy_import_module("node.r2py")
@@ -18,7 +18,7 @@ def test_node_id():
   n = node.Node(random_id, "127.0.0.1", 3000)
   assert len(n.id) == 20, "Error: node id is not 20 bytes."
   assert n.long_id == util.bytes_to_int(n.id), "Error: wrong node long_id."
-  
+
 def test_node_dist():
   n1 = node.Node(random_id, "111.222.33.4", 5000)
   n2 = node.Node(random.random_randombytes(20), "111.322.33.4", 9000)
@@ -34,10 +34,10 @@ def test_good_node():
   n = node.Node(random_id, "124.325.43.24", 32040)
   assert n.good_node() == True, "good_node() should return True for a new node."
 
-  n.pinged = 3 
+  n.pinged = 3
   assert n.good_node() == False, "Error: good_node() returns true even though node.pinged >= 3."
 
-  n.pinged = 0 
+  n.pinged = 0
   n.last_replied = getruntime() - 60*15
   assert n.good_node() == False, "Error: wrong good_node() return value."
 

@@ -1,13 +1,13 @@
 """
-  <Purpose> Test DHT Immutable put and get methods. 
+  <Purpose> Test DHT Immutable put and get methods.
 
   Test on local ports: 63101 - 63120 (10 DHT instances)
-  
-  To run this test, do: 
+
+  To run this test, do:
     - (in one shell)
-      for ((i=63103; i < 63120; i += 2)) 
-      do 
-        python repy.py restrictions.default dylink.r2py ut_dht_test_immutable_put_get.r2py $i $(($i + 1)) & 
+      for ((i=63103; i < 63120; i += 2))
+      do
+        python repy.py restrictions.default dylink.r2py ut_dht_test_immutable_put_get.r2py $i $(($i + 1)) &
       done
 
     - (in another shell)
@@ -22,38 +22,38 @@ if callfunc == "initialize":
   ids = dhtadvertise.random_ids_file("random_ids.txt", 10)
 
   peers = list()
-  n = 63101 
-  i = 0 
+  n = 63101
+  i = 0
   while n < 63120:
     peers.append((getmyip(), n+1, ids[i]))
-    n += 2 
-    i += 1 
+    n += 2
+    i += 1
 
-  # port, setup port 
+  # port, setup port
   if len(callargs) == 2:
     my_p = int(callargs[0])
     setup_p = int(callargs[1])
     # log (my_p, " ", setup_p, "\n")
-    index = (my_p - 63101) / 2 
+    index = (my_p - 63101) / 2
     data_item = {"a": [0, 1, 2], "hello": "world"}
 
     if index == 0:
       key = dhtadvertise.dhtadvertise_put(ids[0], data_item, dhtadvertise.callback, peers, my_port=my_p)
-      
-      while True: 
+
+      while True:
         if dhtadvertise.mycontext["put"]:
           if key is None:
             raise ValueError("Fails to receive immutable key.")
 
           dhtadvertise.dhtadvertise_get(ids[0], key, dhtadvertise.callback, peers)
-          break 
+          break
 
-      while True: 
+      while True:
         if dhtadvertise.mycontext["get"]:
           assert dhtadvertise.mycontext["cb"]["data"] == data_item, "False data item returned by get."
           exitall()
     else:
-      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, version="AD\0\0", 
+      dhtadvertise.dhtadvertise_setup(ids[index], dhtadvertise.callback, peers, version="AD\0\0",
           my_port=my_p, setup_port=setup_p)
 
   else:

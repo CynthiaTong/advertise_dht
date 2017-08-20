@@ -14,8 +14,8 @@ class GeneralKeypairFileError(Exception):
 class Keypair:
   def __init__(self, private_key=None, public_key=None, id_key=None, seq=0, cas=-1, salt=None):
     self.privatekey, self.publickey = ed.create_keypair(private_key, public_key)
-    self.seq = seq 
-    self.cas = cas 
+    self.seq = seq
+    self.cas = cas
     self.salt = salt
     self.create_key(id_key)
 
@@ -27,7 +27,7 @@ class Keypair:
       else:
         self.key = sha.sha_hash(self.publickey.vk_s)
     else:
-      self.key = id_key 
+      self.key = id_key
 
   def sign(self, value):
     return self.privatekey.sign(value)
@@ -37,7 +37,7 @@ class Keypair:
 
   def opts(self, value):
     value = str(value)
-    self.seq += 1  # increment seq for new put query 
+    self.seq += 1  # increment seq for new put query
 
     opts = {
       "k": self.publickey.vk_s,
@@ -46,11 +46,11 @@ class Keypair:
     }
 
     if self.cas > -1:
-      opts["cas"] = self.cas 
+      opts["cas"] = self.cas
     if self.salt is not None and isinstance(self.salt, str):
-      opts["salt"] = self.salt 
+      opts["salt"] = self.salt
 
-    return opts 
+    return opts
 
   def __str__(self):
     output = "privatekey: %s\npublickey: %s\nkey(id) %s\n" %(self.privatekey.sk_s, self.publickey.vk_s, self.key)
@@ -60,9 +60,9 @@ class Keypair:
     if self.salt is not None and isinstance(self.salt, str):
       output += "salt: %s\n" %(self.salt)
 
-    return output 
+    return output
 
-  # keypair file io 
+  # keypair file io
   def export_keypair(self, filename):
     file = openfile(filename, True)
 

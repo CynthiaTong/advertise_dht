@@ -3,18 +3,18 @@
   lookup.r2py
 
 <Author>
-  Cynthia Xin Tong 
+  Cynthia Xin Tong
 
 <Purpose>
-  The Lookup class of the DHT. 
+  The Lookup class of the DHT.
 """
 
 util = dy_import_module("util.r2py")
 rpc = dy_import_module("rpc.r2py")
 dy_import_module_symbols("constants.py")
 
-DHT_LOOKUP_EXPIRE_TIME = 30     # default lookup expire time: 30 seconds  
-LOOKUP_CAPACITY = 14    # default lookup capacity (max peers in a lookup): 14 
+DHT_LOOKUP_EXPIRE_TIME = 30     # default lookup expire time: 30 seconds
+LOOKUP_CAPACITY = 14    # default lookup capacity (max peers in a lookup): 14
 
 class NonexistingCallbackError(Exception):
   """ Error when callback for lookup is not provided """
@@ -26,35 +26,35 @@ class OverloadTokenError(Exception):
 class DHTLookup:
   """
     <Purpose>
-      The DHT uses this DHTLookup class for initiating and conducting lookups 
-      in order to send lookup queries and responses to other nodes in the network. 
+      The DHT uses this DHTLookup class for initiating and conducting lookups
+      in order to send lookup queries and responses to other nodes in the network.
     <Side Effects>
-      Used by the dht_advertise module.  
+      Used by the dht_advertise module.
     <Example Use>
-      # create a new DHTLookup   
+      # create a new DHTLookup
       lookup = DHTLookup(<20-byte id>, <routing table instance>)
       # initiate a lookup
-      lookup.dht_lookup(<target string id>, <lookup port>, <callback method>, <version id>, 
+      lookup.dht_lookup(<target string id>, <lookup port>, <callback method>, <version id>,
           <optional own sending port>, <optional value>, <optional opts>)
       etc. (see below for detailed method documentation)
-  """   
+  """
 
   def __init__(self, string_id, routing_table):
-    self.id = string_id     # our own DHT id 
-    self.lookups = list()     # a list of Lookup instances 
-    self.lid = util.make_lid()    # make a new lookup id 
-    self.lookup_time = 0 
+    self.id = string_id     # our own DHT id
+    self.lookups = list()     # a list of Lookup instances
+    self.lid = util.make_lid()    # make a new lookup id
+    self.lookup_time = 0
     self.router = routing_table
 
   """
     port number implications:
-    
-  
+
+
   """
   def dht_lookup(self, target_string_id, port, callback, version, my_port=63101, value=None, opts=None):
     """
     <Purpose>
-      Start a new DHT lookup. 
+      Start a new DHT lookup.
     <Arguments>
       target_string_id:
         the target id for this lookup in 20-byte string format.
@@ -62,131 +62,131 @@ class DHTLookup:
         the LOOKUP PORT
           types:
           - 0 for pure lookup (GET_PEER)
-          - 1 for GET 
-          - 2 for PUT 
+          - 1 for GET
+          - 2 for PUT
           - > 2 for ANNOUNCE_PEER (actual port numbers)
       callback:
-        callback method, called when lookup is finished   
+        callback method, called when lookup is finished
       version:
-        the DHT's version identifier 
+        the DHT's version identifier
       my_port (default to 63101):
-        our own sending port 
+        our own sending port
       value (default to None):
         optional value field in case of a PUT lookup
       opts (default to None):
-        optional opts field in case of a PUT lookup 
+        optional opts field in case of a PUT lookup
     <Exceptions>
       N/A
     <Side Effects>
-      Called by the dht_advertise module to start lookups.  
-    <Returns> 
-      None. 
+      Called by the dht_advertise module to start lookups.
+    <Returns>
+      None.
     """
-    # increment lookup id for a new lookup 
+    # increment lookup id for a new lookup
     self.lid += 1
     newest = Lookup(target_string_id, self.lid, LOOKUP_CAPACITY, port, value, opts)
-    oldest = None 
+    oldest = None
     # find the oldest lookup
     for l in self.lookups:
       if l.done and (oldest == None or l.step_time < oldest.step_time):
-        oldest = l 
-    # if the oldest has expired, replace it with the new lookup, otherwise append the new lookup 
+        oldest = l
+    # if the oldest has expired, replace it with the new lookup, otherwise append the new lookup
     if oldest and oldest.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
-      index = self.lookups.index(oldest) 
+      index = self.lookups.index(oldest)
       self.lookups[index] = newest
     else:
       self.lookups.append(newest)
-    # fill the new lookup with lookup nodes from our router 
+    # fill the new lookup with lookup nodes from our router
     newest = self.router.get_lookup_nodes(newest, newest.target_id)
     # log (newest)
-    # proceed to lookup_step 
+    # proceed to lookup_step
     self.lookup_step(newest, callback, version, my_port)
-    # update lookup_time 
+    # update lookup_time
     self.lookup_time = getruntime()
 
   def lookup_step(self, lookup, callback, version, my_port=63101, alpha=3, finished=0):
     """
     <Purpose>
-      Send proper RPC messages depending on the status of the lookup. 
+      Send proper RPC messages depending on the status of the lookup.
     <Arguments>
       lookup:
-        the lookup instance that needs to send RPC messages 
+        the lookup instance that needs to send RPC messages
       callback:
-        callback method, called when lookup is finished   
+        callback method, called when lookup is finished
       version:
-        the DHT's version identifier 
+        the DHT's version identifier
       my_port (default to 63101):
-        our own sending port 
+        our own sending port
       alpha (default to 3):
         default Alpha value (Concurrency value of the DHT)
       finished (default to 0):
-        whether the lookup has finished or not 
+        whether the lookup has finished or not
     <Exceptions>
       N/A
     <Side Effects>
-      Called by the DHT class whenever it needs to proceed with a lookup.  
-    <Returns> 
-      None. 
+      Called by the DHT class whenever it needs to proceed with a lookup.
+    <Returns>
+      None.
     """
     if lookup.done:
       return self.lookup_finished(lookup, callback)
 
-    # see if we have got reply from k (8) live nodes 
+    # see if we have got reply from k (8) live nodes
     all_replied = lookup.all_replied()
-    # if we have k live nodes or as many as we can get 
+    # if we have k live nodes or as many as we can get
     if all_replied or finished:
-      lookup.lookup_done = 1 
+      lookup.lookup_done = 1
       # log ("Lookup Port: %d\n" % lookup.port)
-      # if lookup is for get_peer or get, we're finished 
+      # if lookup is for get_peer or get, we're finished
       if lookup.port < 2:
         self.lookup_finished(lookup, callback)
-      else: 
-        all_acked = 0  
-        count = 0 
+      else:
+        all_acked = 0
+        count = 0
         for n in lookup.get_good_nodes():
           if n.acked:
-            all_acked += 1 
+            all_acked += 1
           elif not n.acked and n.token:
-            # if lookup is for announce_peer 
+            # if lookup is for announce_peer
             if lookup.port > 2:
               # log ("Sending announce peer to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("ap", lookup.tid)
-              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token, 
+              rpc.announce_peer(self.id, n.ip, n.port, tid, len(tid), lookup.id, lookup.port, n.token,
                   n.token_len, my_port, version)
-            else:   # lookup is for put 
+            else:   # lookup is for put
               log ("Sending put to: %s %d\n" %(n.ip, n.port))
               tid = util.make_tid("pt", lookup.tid)
               rpc.put(self.id, lookup.value, n.ip, n.port, tid, n.token, my_port, lookup.opts)
-            # increment the pinged field of this lookup node 
-            n.pinged += 1 
+            # increment the pinged field of this lookup node
+            n.pinged += 1
             n.last_req = getruntime()
-            # find node with this id in routing table 
+            # find node with this id in routing table
             router_node = self.router.find_node(n.long_id)
             if router_node:
-              # update the ping info of this node in router 
+              # update the ping info of this node in router
               self.router.pinged(router_node)
         log ("all_acked num: %d \n" % all_acked)
         if all_acked >= 8:
           log ("All acked - thus finished! \n")
-          self.lookup_finished(lookup, callback) 
-      # this step has finished, update step_time and return 
+          self.lookup_finished(lookup, callback)
+      # this step has finished, update step_time and return
       lookup.step_time = getruntime()
-      return 
+      return
 
-    # if not all nodes have replied 
-    # send alpha get_peers / get requests to nodes we have NOT queried 
-    send_count = 0  
-    # if lookup is for get or put, send GET messages 
+    # if not all nodes have replied
+    # send alpha get_peers / get requests to nodes we have NOT queried
+    send_count = 0
+    # if lookup is for get or put, send GET messages
     if lookup.port == 1 or lookup.port == 2:
       for n in lookup.get_nodes():
-        # if node is pinged less than 3 times, and hasn't replied and 
+        # if node is pinged less than 3 times, and hasn't replied and
         # hasn't be requested in the last second
         if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
           log ("Sending get to %s: %d\n" %(n.ip, n.port))
           send_count += self.lookup_get(lookup, n, my_port)
         if send_count >= alpha:
           break
-    else:    # otherwise send get_peers messages 
+    else:    # otherwise send get_peers messages
       for n in lookup.get_nodes():
         if n.pinged < 3 and n.replied == 0 and n.last_req < getruntime() - 1:
           log ("Sending get_peers to %s: %d\n" %(n.ip, n.port))
@@ -198,140 +198,140 @@ class DHTLookup:
   def lookup_finished(self, lookup, callback, values=None, res=None):
     """
     <Purpose>
-      This function is called when a lookup is done. 
+      This function is called when a lookup is done.
     <Arguments>
       lookup:
-        the lookup instance that just finished 
+        the lookup instance that just finished
       callback:
-        the callback to call in this method 
+        the callback to call in this method
       values (default to None):
-        optional values to return in cases where values are found during the lookup 
+        optional values to return in cases where values are found during the lookup
       res (default to None):
-        optional response field in case of a Get lookup 
+        optional response field in case of a Get lookup
     <Exceptions>
       NonexistingCallbackError
-        if no callback function is provided when calling this method 
+        if no callback function is provided when calling this method
     <Side Effects>
-      Called by the DHT class when the lookup has finished.  
-    <Returns> 
-      The callback method.  
+      Called by the DHT class when the lookup has finished.
+    <Returns>
+      The callback method.
     """
-    # lookup has finished, update its properties 
-    lookup.done = 1 
+    # lookup has finished, update its properties
+    lookup.done = 1
     lookup.step_time = getruntime()
     # self.lookups.remove(lookup)
-    # if callback is provided 
+    # if callback is provided
     if callback:
       event = DHT_EVENT_ERROR
       if values:
         # # we do not want to find values during setup
         if lookup.port == 0 and lookup.id == self.id:
-          lookup.done = 0 
-          return 
-        # if lookup is for GET, values is a single value item 
+          lookup.done = 0
+          return
+        # if lookup is for GET, values is a single value item
         if lookup.port == 1:
           return callback(DHT_EVENT_VALUE_ITEM, lookup.id, values, 0, res)
-        # otherwise values are a list of node addresses 
+        # otherwise values are a list of node addresses
         else:
           return callback(DHT_EVENT_VALUES, lookup.id, values, len(values))
       # else if lookup is for ANNOUNCE_PEER, return a list of nodes that have acked (stored our value)
       elif lookup.port > 2:
         acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
-        return callback(DHT_EVENT_ANNOUNCE_DONE, lookup.id, acked_nodes, len(acked_nodes))  
+        return callback(DHT_EVENT_ANNOUNCE_DONE, lookup.id, acked_nodes, len(acked_nodes))
       # else if lookup is for PUT, return a list of nodes that have acked (stored our value)
       elif lookup.port == 2:
         acked_nodes = [n for n in lookup.get_good_nodes() if n.acked]
-        return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes)) 
-      # else if lookup is for GET, AND no values has been found 
+        return callback(DHT_EVENT_PUT_DONE, lookup.id, acked_nodes, len(acked_nodes))
+      # else if lookup is for GET, AND no values has been found
       elif lookup.port == 1:
         event = DHT_EVENT_GET_DONE
-      # else if it's a pure lookup, AND no values has been found 
+      # else if it's a pure lookup, AND no values has been found
       elif lookup.port == 0:
-        # if lookup target is our own id, it's for setup 
+        # if lookup target is our own id, it's for setup
         if lookup.id == self.id:
           event = DHT_EVENT_SETUP_DONE
-        # otherwise it's a pure lookup for some other id  
+        # otherwise it's a pure lookup for some other id
         else:
           event = DHT_EVENT_LOOKUP_DONE
-      # return callback with the good nodes of this lookup 
-      return callback(event, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))  
-    else: 
+      # return callback with the good nodes of this lookup
+      return callback(event, lookup.id, lookup.get_good_nodes(), len(lookup.get_good_nodes()))
+    else:
       raise NonexistingCallbackError("Must provide a callback for DHT operations.")
 
   def lookup_get_peers(self, lookup, version, node, my_port):
     """
     <Purpose>
-      Send get_peers messages for lookup. 
+      Send get_peers messages for lookup.
     <Returns>
       True if message is sent successfully, False otherwise.
     """
     if lookup.done:
-      return 0 
+      return 0
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
-      return 0 
+      return 0
     # log ("Sending get_peers to %s %d\n" %(node.ip, node.port))
     tid = util.make_tid("gp", lookup.tid)
-    # send get_peers 
+    # send get_peers
     rpc.get_peers(self.id, node.ip, node.port, tid, len(tid), lookup.id, my_port, version)
-    node.pinged += 1 
+    node.pinged += 1
     node.last_req = getruntime()
     router_node = self.router.find_node(node.long_id)
     if router_node:
       self.router.pinged(router_node)
-    return 1 
+    return 1
 
   def lookup_get(self, lookup, node, my_port):
     """
     <Purpose>
-      Send get messages for lookup. 
+      Send get messages for lookup.
     <Returns>
       True if message is sent successfully, False otherwise.
     """
     if lookup.done:
-      return 0 
+      return 0
     if not node or node.pinged >= 3 or node.last_req > getruntime() - 1:
-      return 0 
+      return 0
     tid = util.make_tid("gt", lookup.tid)
     rpc.get(self.id, lookup.id, node.ip, node.port, tid, my_port)
-    node.pinged += 1 
+    node.pinged += 1
     node.last_req = getruntime()
     router_node = self.router.find_node(node.long_id)
     if router_node:
       self.router.pinged(router_node)
-    return 1 
+    return 1
 
   def find_lookup_by_tid(self, tid):
     """
     <Purpose>
-      Find and return the lookup from our lookup list by searching for transaction id. 
+      Find and return the lookup from our lookup list by searching for transaction id.
     <Arguments>
       tid:
-        the transaction id used to search for the lookup 
+        the transaction id used to search for the lookup
     <Exceptions>
       N/A
     <Side Effects>
-      Called by the DHT class to find the desired lookup instance.  
-    <Returns> 
-      The lookup instance if it exists, None otherwise. 
+      Called by the DHT class to find the desired lookup instance.
+    <Returns>
+      The lookup instance if it exists, None otherwise.
     """
     for l in self.lookups:
-      # Note: the lookup tid is an Integer, while the tid sent in RPC messages is a bytes string 
+      # Note: the lookup tid is an Integer, while the tid sent in RPC messages is a bytes string
       if l.tid == util.bytes_to_int(tid):
-        return l 
-    return None 
+        return l
+    return None
 
   def expire_lookups(self):
     """
     <Purpose>
-      Remove the lookups in the lookups list if they have expired. 
+      Remove the lookups in the lookups list if they have expired.
     <Arguments>
-      None. 
+      None.
     <Exceptions>
       N/A
     <Side Effects>
-      Called by the DHT class's periodic method to expire lookups. 
-    <Returns> 
-      None. 
+      Called by the DHT class's periodic method to expire lookups.
+    <Returns>
+      None.
     """
     for l in self.lookups:
       if l.step_time < getruntime() - DHT_LOOKUP_EXPIRE_TIME:
@@ -340,193 +340,193 @@ class DHTLookup:
   def get_lookups(self):
     """
     <Purpose>
-      Getter method for all lookups in the lookups list 
+      Getter method for all lookups in the lookups list
     """
-    return self.lookups 
+    return self.lookups
 
 
 class Lookup:
   """
     <Purpose>
-      Lookup instances store all peer information needed for a specific lookup. 
+      Lookup instances store all peer information needed for a specific lookup.
     <Side Effects>
       Instances are created by the DHTLookup class when lookup starts.
     <Example Use>
       # create a new lookup
-      l = Lookup(<20-byte id>, <transaction id>, <lookup capacity>, <optional lookup port>, 
+      l = Lookup(<20-byte id>, <transaction id>, <lookup capacity>, <optional lookup port>,
           <optional value field>, <optional opts field>)
-      # insert a new peer into this lookup 
-      l.insert(<20-byte node id>, <ip address>, <port number>, <replied flag>, <optional token field>, 
+      # insert a new peer into this lookup
+      l.insert(<20-byte node id>, <ip address>, <port number>, <replied flag>, <optional token field>,
           <optional token length field>)
       etc. (see below for detailed method documentation)
-  """   
+  """
   def __init__(self, string_id, tid, capacity, port=0, value=None, opts=None):
     self.id = string_id
-    self.target_id = util.bytes_to_int(self.id)   # target ids are Integers 
+    self.target_id = util.bytes_to_int(self.id)   # target ids are Integers
     self.capacity = capacity
-    self.tid = tid 
-    self.port = port    # 0 for pure searches 
-    self.step_time = 0 
-    self.done = 0 
-    self.lookup_done = 0 
-    self.value = value 
-    self.opts = opts 
-    self.list = list()    # sorted: closest at head, furthest at tail 
+    self.tid = tid
+    self.port = port    # 0 for pure searches
+    self.step_time = 0
+    self.done = 0
+    self.lookup_done = 0
+    self.value = value
+    self.opts = opts
+    self.list = list()    # sorted: closest at head, furthest at tail
 
-  # Insert into the lookup list: 
- 
+  # Insert into the lookup list:
+
   def insert(self, id, ip, port, replied=0, token=None, token_len=0):
     """
     <Purpose>
       Insert a lookup node into the lookup list:
-      if new contact's dist to target is less than the furthest in the list, 
-      insert it and discard the old furthest if necessary (exceed capacity). 
-      Otherwise, if the contact already exist or is further than the furthest, discard it. 
+      if new contact's dist to target is less than the furthest in the list,
+      insert it and discard the old furthest if necessary (exceed capacity).
+      Otherwise, if the contact already exist or is further than the furthest, discard it.
     <Arguments>
       id:
-        the 20-byte string id of the node 
+        the 20-byte string id of the node
       ip, port:
-        the ip and port information of the node 
+        the ip and port information of the node
       replied:
-        whether the node has replied to our queries 
+        whether the node has replied to our queries
       token (default to None):
         the token value of the lookup node
       token_len(default to 0):
-        length of the token 
+        length of the token
     <Exceptions>
       OverloadTokenError
-        if the token parameter is longer than 16 bytes 
+        if the token parameter is longer than 16 bytes
     <Side Effects>
-      Called by the DHT class to insert nodes into lookup.  
-    <Returns> 
-      None. 
+      Called by the DHT class to insert nodes into lookup.
+    <Returns>
+      None.
     """
-    # create a new lookup node 
+    # create a new lookup node
     lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
 
-    # if node id is the same as our own, return 
+    # if node id is the same as our own, return
     if id == self.id:
-      return 
-    # if it's the first node in our list, just append it and return 
+      return
+    # if it's the first node in our list, just append it and return
     if len(self.list) == 0:
       self.list.append(lookup_node)
-      return 
+      return
 
     for i in range(len(self.list)):
       n = self.list[i]
-      # compare the XOR distance between target id, this new lookup node, and the i-th node in our list 
+      # compare the XOR distance between target id, this new lookup node, and the i-th node in our list
       comparison = util.compare_distance(self.target_id, lookup_node.long_id, n.long_id)
       if comparison == 0:
         # found!
         # log ("found! %d at index %d \n" % (port, i))
         if replied:
-          # update node properties 
-          n.replied = 1 
+          # update node properties
+          n.replied = 1
           n.last_replied = getruntime()
-          n.last_req = 0 
-          n.pinged = 0 
+          n.last_req = 0
+          n.pinged = 0
 
-          if token and token_len > 20: 
-            # our own tokens are SHA-1 Hashes, so it's an overload token 
+          if token and token_len > 20:
+            # our own tokens are SHA-1 Hashes, so it's an overload token
             raise OverloadTokenError("Overload token: %s(%d)" % (token, token_len))
-        return 
-      # else if the new node is further away from the target 
+        return
+      # else if the new node is further away from the target
       elif comparison > 0:
-        continue 
-      # node is closer to target 
-      else:   
+        continue
+      # node is closer to target
+      else:
         self.list.insert(i, lookup_node)
         if len(self.list) > self.capacity:
-          # pop the furthest node that hasn't replied 
-          i = -1     
+          # pop the furthest node that hasn't replied
+          i = -1
           while self.list[i].replied and i > len(self.list) * -1:
-            i -= 1 
+            i -= 1
 
           if i >= len(self.list) * -1:
             self.list.pop(i)
           # in case all have replied
           else:
             self.list.pop()
-        return 
-    # if there's room in our list after looping through self.list, just append the new node 
+        return
+    # if there's room in our list after looping through self.list, just append the new node
     if len(self.list) < self.capacity:
       self.list.append(lookup_node)
 
   def remove(self, lookup_node):
     """
     <Purpose>
-      Remove a node from our lookup list. 
+      Remove a node from our lookup list.
     """
     if lookup_node in self.list:
       self.list.remove(lookup_node)
-      return True 
-    return False 
+      return True
+    return False
 
   def all_replied(self):
     """
     <Purpose>
-      Check if at least k (8) nodes in this lookup has replied. 
+      Check if at least k (8) nodes in this lookup has replied.
     <Arguments>
-      None. 
+      None.
     <Exceptions>
       N/A
     <Side Effects>
-      Called by the DHTLookup class to check for replied nodes.  
-    <Returns> 
-      True if at least k nodes has replied, False otherwise. 
+      Called by the DHTLookup class to check for replied nodes.
+    <Returns>
+      True if at least k nodes has replied, False otherwise.
     """
-    live_node_count = 0 
+    live_node_count = 0
 
     for n in self.list:
-      if n.pinged >= 3: 
-        continue 
+      if n.pinged >= 3:
+        continue
       if not n.replied:
-        continue     
-      live_node_count += 1 
+        continue
+      live_node_count += 1
 
     if live_node_count >= 8:
-        return True 
-    return False 
+        return True
+    return False
 
   def get_nodes(self):
     """
     <Purpose>
-      Getter for the list of lookup nodes. 
+      Getter for the list of lookup nodes.
     """
-    return self.list 
+    return self.list
 
   def get_all_ids(self):
     """
     <Purpose>
-      Getter for all lookup nodes' ids. 
+      Getter for all lookup nodes' ids.
     """
     return [n.id for n in self.list]
 
   def is_full(self):
     """
     <Purpose>
-      Check if the length of lookup nodes list has exceeded capacity 
+      Check if the length of lookup nodes list has exceeded capacity
     """
     return len(self.list) >= self.capacity
 
   def __str__(self):
     """
     <Purpose>
-      String representation of this lookup instance. 
+      String representation of this lookup instance.
     """
-    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" % 
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" %
               (self.target_id, self.tid, self.port, self.step_time, self.done, self.lookup_done))
     output += "lookup nodes (%d): \n" % len(self.list)
     for l in self.list:
       output += l.ip + ": " + str(l.port) + "\t" + str(l.replied) + "\n"
-    return output 
+    return output
 
   def print_good_nodes(self):
     """
     <Purpose>
-      Print only the good nodes in the lookup list. 
+      Print only the good nodes in the lookup list.
     """
-    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" % 
+    output = ("target_id: %s\ntid: %s, port: %d\nstep_time: %.2f, done: %d, lookup_done: %d\n" %
             (self.target_id, self.tid, self.port, self.step_time, self.done, self.lookup_done))
     output += "good lookup nodes: \n"
     for l in self.list:
@@ -537,34 +537,34 @@ class Lookup:
   def get_good_nodes(self):
     """
     <Purpose>
-      Return a list of only the good nodes in the lookup list. 
+      Return a list of only the good nodes in the lookup list.
     """
     l_list = list()
     for l in self.list:
       if l.replied:
         l_list.append(l)
-    return l_list 
+    return l_list
 
 
 class Lookup_Node():
   """
     <Purpose>
-      Lookup_Node instances are the smallest unit in a lookup that hold single node information.  
+      Lookup_Node instances are the smallest unit in a lookup that hold single node information.
     <Side Effects>
-      Used for a lookup process. 
+      Used for a lookup process.
     <Example Use>
-      # create a new lookup node 
+      # create a new lookup node
       n = Lookup_Node(<20-byte id>, <ip address>, <port number>, <replied flag>, <token>, <token length>)
-  """   
+  """
   def __init__(self, id, ip, port, replied, token, token_len):
-    self.id = id 
+    self.id = id
     self.long_id = util.bytes_to_int(self.id)
-    self.ip = ip 
-    self.port = port 
-    self.replied = replied 
-    self.last_replied = 0 
-    self.last_req = 0 
-    self.acked = 0 
-    self.token = token 
+    self.ip = ip
+    self.port = port
+    self.replied = replied
+    self.last_replied = 0
+    self.last_req = 0
+    self.acked = 0
+    self.token = token
     self.token_len = token_len
-    self.pinged = 0 
+    self.pinged = 0

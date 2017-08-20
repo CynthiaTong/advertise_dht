@@ -1,5 +1,5 @@
 """
-  <Purpose> Test DHT Storage class properties and methods 
+  <Purpose> Test DHT Storage class properties and methods
 """
 
 storage = dy_import_module("storage.r2py")
@@ -43,12 +43,12 @@ def test_store_value():
   assert st.values["v4"]["dict"] == {"a": "b"}, "Wrong dict value stored."
   assert st.numvalues == 4, "Wrong number of values stored."
 
-  try: 
+  try:
     stored = st.store_value("v5", "abcde")
     assert stored == False, "Should not have stored non-dict value."
     log ("Should have thrown TypeError for non-dict value.\n")
   except TypeError:
-    pass 
+    pass
   except:
     log ("Wrong error thrown for non-dict value.\n")
 

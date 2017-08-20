@@ -1,43 +1,43 @@
-# default storage expire interval: 30 minutes 
-TTL = 30 * 60 
+# default storage expire interval: 30 minutes
+TTL = 30 * 60
 
-class Storage: 
+class Storage:
   """
     <Purpose>
-    Store peers and value items for a DHT node. 
+    Store peers and value items for a DHT node.
     <Side Effects>
-    Used by the dht module. 
+    Used by the dht module.
     <Example Use>
-    # create a storage object 
+    # create a storage object
     st = Storage(<string id>, <optional ttl value>)
-    # store a value  
+    # store a value
     st.store_value(key, value)
-    # retrieve a value  
+    # retrieve a value
     st.retrieve_value(key)
-    # store a peer 
+    # store a peer
     st.store(<id>, <ip>, <port>)
-    # retrieve a peer 
+    # retrieve a peer
     st.retrieve(<id>)
-    # expire this storage 
+    # expire this storage
     st.expire_storage()
 
-  """   
+  """
 
   def __init__(self, string_id, ttl=TTL):
     self.id = string_id
-    self.ttl = ttl  
-    self.peers = dict()   # dictionary of arrays of peer objects 
-    self.numpeers = 0 
-    self.values = dict()  # data from put requests 
-    self.numvalues = 0 
+    self.ttl = ttl
+    self.peers = dict()   # dictionary of arrays of peer objects
+    self.numpeers = 0
+    self.values = dict()  # data from put requests
+    self.numvalues = 0
 
   """
-    Store a value object under an id key. 
+    Store a value object under an id key.
     If key already exists and sequence numbers are equal:
-      update the stored_time attribute if values are identical 
-      ignore the new value 
-    Otherwise, store the new value 
-    Note: the value object is always of the dictionary type! 
+      update the stored_time attribute if values are identical
+      ignore the new value
+    Otherwise, store the new value
+    Note: the value object is always of the dictionary type!
 
   """
   def store_value(self, id_key, value_obj):
@@ -48,7 +48,7 @@ class Storage:
     if self.values.has_key(id_key):
       # if our value item has no "seq" field, it is an IMMUTABLE item that cannot be updated
       if not self.values[id_key]["a"].has_key("seq"):
-        return False 
+        return False
       if self.values[id_key]["a"]["seq"] == value_obj["a"]["seq"]:
         # if seq and values are both identical, just update the stored time info
         if self.values[id_key]["a"]["v"] == value_obj["a"]["v"]:
@@ -61,14 +61,14 @@ class Storage:
         self.values[id_key] = value_obj
         self.values[id_key]["stored_time"] = getruntime()
     # otherwise no existing id key, add the new key-value pair and increment numvalues
-    else: 
-      self.values[id_key] = value_obj 
+    else:
+      self.values[id_key] = value_obj
       self.values[id_key]["stored_time"] = getruntime()
       self.numvalues += 1
-    return True 
-  
+    return True
+
   """
-    Retrieve the value associated with the key parameter. 
+    Retrieve the value associated with the key parameter.
 
   """
   def retrieve_value(self, id_key):
@@ -76,30 +76,30 @@ class Storage:
       return self.values[id_key]
 
   """
-    Store the <id, ip, port> triple into peers dictionary. 
+    Store the <id, ip, port> triple into peers dictionary.
 
   """
   def store(self, id_key, ip, port):
     storage_val = self.peers.get(id_key)
-    # if it's a new key, add the value to peers  
+    # if it's a new key, add the value to peers
     if storage_val == None:
       self.peers[id_key] = [Peer(ip, port, getruntime())]
-      self.numpeers += 1 
+      self.numpeers += 1
     else:
-      # if key already exists 
-      new_val = True 
+      # if key already exists
+      new_val = True
       for v in storage_val:
-        # if existing value, just update storage time 
+        # if existing value, just update storage time
         if ip == v.ip and port == v.port:
           v.update_time(getruntime())
-          new_val = False 
-      # append new value 
+          new_val = False
+      # append new value
       if new_val:
         storage_val.append(Peer(ip, port, getruntime()))
-        self.numpeers += 1 
+        self.numpeers += 1
 
   """
-    Retrieve the peer associated with the key parameter. 
+    Retrieve the peer associated with the key parameter.
 
   """
   def retrieve(self, id_key):
@@ -107,60 +107,60 @@ class Storage:
       return self.peers[id_key]
 
   """
-    Expire peers and values in this storage. 
-    Peers expire in 30 minutes, values expire in 2 hours. 
+    Expire peers and values in this storage.
+    Peers expire in 30 minutes, values expire in 2 hours.
 
   """
   def expire_storage(self):
     for key, value in self.peers.items():
       # log (value, "\n")
       filtered = [p for p in value if getruntime() - p.stored_time < self.ttl]
-      # log (filtered, "\n") 
+      # log (filtered, "\n")
       self.peers[key] = filtered
       self.numpeers -= len(value) - len(filtered)
 
     for key, value in self.values.items():
       if getruntime() - value["stored_time"] > 4 * self.ttl:    # typically values expire every 2 hours
         del self.values[key]
-        self.numvalues -= 1 
+        self.numvalues -= 1
 
   """
-    String representation of this storage. 
+    String representation of this storage.
 
   """
   def __str__(self):
-    output = "Storage ID: %s \nPeers: \n" % self.id 
+    output = "Storage ID: %s \nPeers: \n" % self.id
     for key, value in self.peers.items():
       for p in value:
-        output += str(p) + "\t" 
+        output += str(p) + "\t"
       output += "\n"
     output += "Values: \n"
     for key, value in self.values.items():
       output += key + ": " + str(value)
     output += "\n"
-    return output 
+    return output
 
 
 class Peer:
   """
     <Purpose>
-    Holding peer information. 
+    Holding peer information.
     <Side Effects>
-    Used by the Storage class. 
+    Used by the Storage class.
     <Example Use>
-    # create a peer object 
+    # create a peer object
     peer = Peer(<ip>, <port>, <storage time>)
-    # update the storage time 
+    # update the storage time
     peer.update_time(<time>)
-  
-  """   
+
+  """
   def __init__(self, ip, port, time):
-    self.ip = ip 
+    self.ip = ip
     self.port = port
     self.stored_time = time
 
   def update_time(self, time):
-    self.stored_time = time 
+    self.stored_time = time
 
   def __str__(self):
     age = getruntime() - self.stored_time

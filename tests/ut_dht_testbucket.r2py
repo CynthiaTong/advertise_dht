@@ -1,5 +1,5 @@
 """
-  <Purpose> Test DHT Bucket class properties and methods 
+  <Purpose> Test DHT Bucket class properties and methods
 """
 
 bucket = dy_import_module("bucket.r2py")

@@ -1,6 +1,6 @@
 """
-  <Purpose> Test DHT Advertise announce (and lookup) method, 
-  by announcing our ip and port first after setup, and then perform a lookup on it. 
+  <Purpose> Test DHT Advertise announce (and lookup) method,
+  by announcing our ip and port first after setup, and then perform a lookup on it.
 """
 
 dhtadvertise = dy_import_module("dht_advertise.r2py")
@@ -8,12 +8,12 @@ random = dy_import_module("random.r2py")
 
 rand = random.random_randombytes(20)
 my_id = dhtadvertise.id_from_file("example.id")
-my_port = 63101   # default port 
-setup_port = 63102  # default setup port 
+my_port = 63101   # default port
+setup_port = 63102  # default setup port
 
 if callfunc == "initialize":
   dhtadvertise.dhtadvertise_announce_once(my_id, rand, dhtadvertise.callback, port=3000, my_port=my_port, setup_port=setup_port)
-  
+
   while True:
     if dhtadvertise.mycontext["announce"]:
 
@@ -23,7 +23,7 @@ if callfunc == "initialize":
 
       sleep(0.1)
       dhtadvertise.dhtadvertise_lookup(my_id, rand, dhtadvertise.callback)
-      break 
+      break
 
   while True:
     if dhtadvertise.mycontext["lookup"]:
@@ -33,11 +33,11 @@ if callfunc == "initialize":
       assert resp["event"] == 3, "Lookup event should be 'DHT_EVENT_VALUES' (3)."
       assert rand == resp["id"], "Wrong lookup id."
 
-      found = False 
+      found = False
       for v in resp["data"]:
         # no way to get our public ip easily, so for now just check port number
         if v[1] == 3000:
-          found = True 
-          break 
+          found = True
+          break
       assert found, "Fails to find announced value."
-      exitall() 
+      exitall()
