@@ -13,7 +13,7 @@ util = dy_import_module("util.r2py")
 rpc = dy_import_module("rpc.r2py")
 dy_import_module_symbols("constants.py")
 
-DHT_LOOKUP_EXPIRE_TIME = 2 * 60     # default lookup expire time: 2 minutes 
+DHT_LOOKUP_EXPIRE_TIME = 30     # default lookup expire time: 30 seconds  
 LOOKUP_CAPACITY = 14    # default lookup capacity (max peers in a lookup): 14 
 
 class NonexistingCallbackError(Exception):

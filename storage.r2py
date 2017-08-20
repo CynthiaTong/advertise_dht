@@ -44,12 +44,23 @@ class Storage:
 
     if not isinstance(value_obj, dict):
       raise TypeError("value object needs to be of type dict. Not %s\n" % type(value_obj))
-
-    if self.values.has_key(id_key) and self.values[id_key]["a"]["seq"] == value_obj["a"]["seq"]:
-      if self.values[id_key]["a"]["v"] == value_obj["a"]["v"]:
-        self.values[id_key]["stored_time"] = getruntime()
-      else:
+    # if the key already exists
+    if self.values.has_key(id_key):
+      # if our value item has no "seq" field, it is an IMMUTABLE item that cannot be updated
+      if not self.values[id_key]["a"].has_key("seq"):
         return False 
+      if self.values[id_key]["a"]["seq"] == value_obj["a"]["seq"]:
+        # if seq and values are both identical, just update the stored time info
+        if self.values[id_key]["a"]["v"] == value_obj["a"]["v"]:
+          self.values[id_key]["stored_time"] = getruntime()
+        # if same seq but different values, the value item can NOT be updated, return False
+        else:
+          return False
+      # otherwise seqs are different, update the existing key-value pair
+      else:
+        self.values[id_key] = value_obj
+        self.values[id_key]["stored_time"] = getruntime()
+    # otherwise no existing id key, add the new key-value pair and increment numvalues
     else: 
       self.values[id_key] = value_obj 
       self.values[id_key]["stored_time"] = getruntime()
