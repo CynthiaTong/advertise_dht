@@ -1,3 +1,14 @@
+"""
+<Program Name>
+  dht_advertise.r2py
+
+<Author>
+  Cynthia Xin Tong
+
+<Purpose>
+  The DHT advertise module.
+"""
+
 # log (getruntime(), "\n")
 dht_module = dy_import_module("dht.r2py")
 util = dy_import_module("util.r2py")
@@ -14,6 +25,7 @@ my_ip = getmyip()
 MY_PORT = 63101
 SETUP_PORT = 63102
 timeout = 600   # set timeout to be 10 min for now
+# context variables
 mycontext["setup"] = False
 mycontext["announce"] = False
 mycontext["lookup"] = False
@@ -23,13 +35,41 @@ mycontext["get"] = False
 mycontext["lock"] = createlock()
 mycontext["cb"] = None
 
+class DHTSetupError(Exception):
+  """ Error setting up the DHT """
 class DHTNoResponseError(Exception):
-  """ Error starting up the DHT """
+  """ Not enough responses to complete the DHT setup"""
 class DHTAdvertiseError(Exception):
   """ Error announcing to the DHT """
+class DHTPutValueError(ValueError):
+  """ ValueError when putting to the DHT """
+class DHTPutTypeError(TypeError):
+  """ TypeError when putting to the DHT """
 
 
 def callback(event, id, data, data_len=0, res=None):
+  """
+  <Purpose>
+    Provide the callback when DHT lookup has finished.
+  <Arguments>
+    event:
+      the event type of the callback (see constants.py for all events)
+    id:
+      the 20-byte lookup id
+    data:
+      the data returned by the lookup
+    data_len (default to 0):
+      the data length
+    res (default to None):
+      response in case of a GET lookup
+  <Exceptions>
+    N/A
+  <Side Effects>
+    Passed to the DHT and lookup module.
+  <Returns>
+    None.
+  """
+  # define mycontext["cb"] as a dictionary with all parameters
   mycontext["cb"] = {"event": event, "id":id, "data":data, "data length": data_len, "response": res}
   # log (mycontext["cb"], "\n")
 
@@ -76,14 +116,41 @@ def callback(event, id, data, data_len=0, res=None):
 
   log (output)
 
-  # log (mycontext["dht"].router)
 
 def dhtadvertise_setup(my_id, callback, peers=my_peers, keypair=None, version=None, my_port=MY_PORT,
     setup_port=SETUP_PORT):
+  """
+  <Purpose>
+    Bootstrap our DHT client into an initial network of peers.
+  <Arguments>
+    my_id:
+      our own string id
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    keypair (default to None):
+      the keypair object in case of mutable PUT
+    version (default to None):
+      optional version identifier
+    my_port, setup_port (default to 63101 and 63102):
+      the two ports we use for lookups and receiving+responding to incoming messages respectively.
+  <Exceptions>
+    DHTSetupError:
+      if anything goes wrong during setup.
+    Other Exceptions might be raised by the setup_listen function called in this function.
+  <Side Effects>
+    Passed to the DHT and lookup module.
+  <Returns>
+    None.
+  """
   try:
+    # create a new DHT object
     mycontext["dht"] = dht_module.DHT(my_id, keypair, version)
+    # start listening on the setup port
     listen = setup_listen(setup_port, callback)
     createthread(listen)
+    # add known peers to routing table
     for p in peers:
       ip = gethostbyname(p[0])
       port = int(p[1])
@@ -99,10 +166,11 @@ def dhtadvertise_setup(my_id, callback, peers=my_peers, keypair=None, version=No
       mycontext["dht"].router.add_contact(_id, ip, port, 2)   # 2 for general adding (not reply or query)
 
   except Exception, e:
-    raise Exception("Failed to initialize DHT. " + str(e) + "\n")
+    raise DHTSetupError("Failed to initialize DHT: %s" % repr(e))
 
   sleep(0.1)
   # log (mycontext["dht"].router.get_all_nodes(), "\n")
+  # start the setup: lookup for own id
   mycontext["dht"].lookups.dht_lookup(my_id, 0, callback, version, setup_port)    # lookup my_id
 
   # call periodic
@@ -111,6 +179,10 @@ def dhtadvertise_setup(my_id, callback, peers=my_peers, keypair=None, version=No
 
 
 def periodic(port):
+  """
+  <Purpose>
+    Call the DHT periodic method when timing is right.
+  """
   def perio():
     while True:
       if mycontext["dht"].to_sleep <= getruntime():
@@ -118,6 +190,22 @@ def periodic(port):
   return perio
 
 def setup_listen(port, callback=callback):
+  """
+  <Purpose>
+    Keep a port open for communication with other nodes until the DHT is shut down due to timeout.
+  <Arguments>
+    port:
+      our setup port number
+    callback:
+      the callback method
+  <Exceptions>
+    DHTNoResponseError:
+      if DHT has not completed the setup after timeout.
+  <Side Effects>
+    Called when starting up a new DHT client.
+  <Returns>
+    The nested listen function.
+  """
   def listen():
     starttime = getruntime()
     udpresponsesocket = listenformessage(my_ip, port)
@@ -151,8 +239,30 @@ def setup_listen(port, callback=callback):
   return listen
 
 def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT):
+  """
+  <Purpose>
+    Open a port for a lookup process.
+  <Arguments>
+    operation_type:
+      the DHT operation type that calls this listen function. For instance,
+      "announce" type for announce_peer.
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    my_ip (default to the result of getmyip()):
+      our own ip address
+    my_port (default to 63101):
+      the port used for sending and receiving lookup messages
+  <Exceptions>
+    DHTAdvertiseError:
+      if socket is closed and the DHT operation has not completed properly.
+  <Side Effects>
+    Called by all DHT operation functions.
+  <Returns>
+    The nested listen function.
+  """
   def listen():
-
     mycontext["lock"].acquire(True)
     starttime = getruntime()
 
@@ -188,6 +298,30 @@ def call_listen(operation_type, callback=callback, my_ip=my_ip, my_port=MY_PORT)
 
 def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None, my_port=MY_PORT,
     setup_port=SETUP_PORT):
+  """
+  <Purpose>
+    The DHT lookup function - for searching the ip and port values associated with a certain id.
+  <Arguments>
+    my_id:
+      our own string id
+    target_id:
+      the target id for this lookup
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    version (default to None):
+      optional version identifier
+    my_port, setup_port (default to 63101 and 63102):
+      the two ports we use for lookups and receiving+responding to incoming messages respectively.
+  <Exceptions>
+    Exceptions might be raised in the dhtadvertise_setup or call_listen functions which are called in
+    this function.
+  <Side Effects>
+    Called by users to perform DHT lookups for a known target id.
+  <Returns>
+    The dht_lookup method which returns None.
+  """
   # turn the flag
   mycontext["lookup"] = False
 
@@ -204,13 +338,38 @@ def dhtadvertise_lookup(my_id, target_id, callback, peers=my_peers, version=None
       createthread(listen)
 
       return mycontext["dht"].lookups.dht_lookup(target_id, 0, callback, version, my_port)
-"""
-  original BitTorrent method:
-  Announce that the peer, controlling the querying node, is downloading a torrent on a port
-  If port is not specified, automatically use the source port of the UDP packets
-"""
+
+
 def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=MY_PORT, version=None,
     my_port=MY_PORT, setup_port=SETUP_PORT):
+  """
+  <Purpose>
+    original BitTorrent method:
+    Announce that the peer, controlling the querying node, is downloading a torrent on a port
+    If port is not specified, automatically use the source port of the UDP packets
+  <Arguments>
+    my_id:
+      our own string id
+    target_id:
+      the target id for this lookup
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    port (default to MY_PORT):
+      the downloading port
+    version (default to None):
+      optional version identifier
+    my_port, setup_port (default to 63101 and 63102):
+      the two ports we use for lookups and receiving+responding to incoming messages respectively.
+  <Exceptions>
+    Exceptions might be raised in the dhtadvertise_setup or call_listen functions which are called in
+    this function.
+  <Side Effects>
+    Called by users to announce a downloading port to peers.
+  <Returns>
+    The dht_lookup method which returns None.
+  """
   # turn the flag
   mycontext["announce"] = False
 
@@ -229,11 +388,41 @@ def dhtadvertise_announce_once(my_id, target_id, callback, peers=my_peers, port=
 
       return mycontext["dht"].lookups.dht_lookup(target_id, port, callback, version, my_port)
 
-"""
-  Value accepted here: any bencoded type (list, dict, string or integer)
-"""
+
 def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=None,
     my_port=MY_PORT, setup_port=SETUP_PORT):
+  """
+  <Purpose>
+    The DHT put function - for annoucing a value item to peers within the network.
+    Note:
+    Value accepted here: any bencoded type - list, dict, string or integer.
+  <Arguments>
+    my_id:
+      our own string id
+    value:
+      the value to be put
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    key (default to None):
+      the key associated with the to-be-put value
+    keypair (default to None):
+      optional Keypair object for mutable put
+    my_port, setup_port (default to 63101 and 63102):
+      the two ports we use for lookups and receiving+responding to incoming messages respectively.
+  <Exceptions>
+    DHTPutTypeError:
+      if the parameter values are of the wrong type.
+    DHTPutValueError:
+      if the parameter values are not present or in the wrong format.
+    Other Exceptions might be raised in the dhtadvertise_setup or call_listen functions which are
+    called in this function.
+  <Side Effects>
+    Called by users to perform DHT put for a certain value item.
+  <Returns>
+    The key to the value that has been put.
+  """
   # turn the flag
   mycontext["put"] = False
   _key = opts = None
@@ -249,31 +438,30 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=N
       _key = key
     opts = keypair.opts(value)
 
-  log (_key, "\n")
-  log (opts, "\n")
+  # log (_key, "\n")
+  # log (opts, "\n")
 
   if value is None:
-    raise ValueError("DHT Put: value is required.")
+    raise DHTPutValueError("DHT Put: value is required.")
   if len(util.encoder(value)) >= 1000:
-    raise ValueError("DHT Put: values must be under 1000 bytes.")
+    raise DHTPutValueError("DHT Put: values must be under 1000 bytes.")
 
   if opts:
     if not isinstance(opts, dict):
-      raise TypeError("opts must be a dictionary if provided.")
+      raise DHTPutTypeError("opts must be a dictionary if provided.")
 
     if opts.has_key("cas") and not isinstance(opts["cas"], int):
-      raise ValueError("Mutable DHT put: cas must be an Integer if provided.")
+      raise DHTPutValueError("Mutable DHT put: cas must be an Integer if provided.")
     if not (opts.has_key("k") and len(opts["k"]) == 32):
-      raise ValueError("Mutable DHT put: 32-byte k ed25519 public key is required.")
+      raise DHTPutValueError("Mutable DHT put: 32-byte k ed25519 public key is required.")
     if not (opts.has_key("sig") and len(opts["sig"]) == 64):
-      raise ValueError("Mutable DHT put: 64-byte signature is required.")
+      raise DHTPutValueError("Mutable DHT put: 64-byte signature is required.")
     if opts.has_key("salt") and len(opts["salt"]) > 64:
-      raise ValueError("Mutable DHT put: salt must be no larger than 64 bytes if provided.")
+      raise DHTPutValueError("Mutable DHT put: salt must be no larger than 64 bytes if provided.")
     if not opts.has_key("seq"):
-      raise ValueError("Mutable DHT put: sequence number is required.")
+      raise DHTPutValueError("Mutable DHT put: sequence number is required.")
     if not isinstance(opts["seq"], int):
-      raise ValueError("Mutable DHT put: sequence number must be an Integer.")
-
+      raise DHTPutValueError("Mutable DHT put: sequence number must be an Integer.")
 
   if not mycontext["setup"]:
     dhtadvertise_setup(my_id, callback, peers, keypair, setup_port=setup_port)
@@ -290,10 +478,33 @@ def dhtadvertise_put(my_id, value, callback, peers=my_peers, key=None, keypair=N
           opts=opts)
       break
 
-  return _key  # return key for future immutable lookup
+  return _key   # return key for future immutable lookup
 
-# Note: the get method does NOT require keypair, even for mutable data
+
 def dhtadvertise_get(my_id, key, callback, peers=my_peers, my_port=MY_PORT, setup_port=SETUP_PORT):
+  """
+  <Purpose>
+    The DHT get function - for lookup a value item based on its key within the network.
+    Note: the get method does NOT require keypair, even for mutable data
+  <Arguments>
+    my_id:
+      our own string id
+    key:
+      the key associated with the value we're searching for
+    callback:
+      the callback method
+    peers (default to my_peers):
+      a collection of known peers
+    my_port, setup_port (default to 63101 and 63102):
+      the two ports we use for lookups and receiving+responding to incoming messages respectively.
+  <Exceptions>
+    Exceptions might be raised in the dhtadvertise_setup or call_listen functions which are
+    called in this function.
+  <Side Effects>
+    Called by users to perform DHT get for a certain value item.
+  <Returns>
+    The dht_lookup method which returns None.
+  """
   # turn the flag
   mycontext["get"] = False
 
@@ -312,13 +523,22 @@ def dhtadvertise_get(my_id, key, callback, peers=my_peers, my_port=MY_PORT, setu
       return mycontext["dht"].lookups.dht_lookup(key, 1, callback, version=None, my_port=my_port)
 
 
-# if the values we're looking for exist in local storage
-def dhtadvertise_local_lookup(id):
-  values = dht.storage.retrieve(id)
-  if values:
-    return values
+def dhtadvertise_local_lookup(key):
+  """
+  <Purpose>
+    Local lookup method in case the values we're looking for exist in local storage
+  """
+  addresses = dht.storage.retrieve(key)
+  values = dht.storage.retrieve_value(key)
+  return addresses, values
+
 
 def id_from_file(filename):
+  """
+  <Purpose>
+    Create a local file that stores a random id if it does not exist yet;
+    retrieve the id value from the local file if it already exists.
+  """
   file = openfile(filename, True)
   value = file.readat(20, 0)
   # if file has no content yet
@@ -332,6 +552,11 @@ def id_from_file(filename):
     return value
 
 def random_ids_file(filename, n):
+  """
+  <Purpose>
+    Create a local file that stores a collection of random ids if it does not exist yet;
+    retrieve the id values from the local file if it already exists.
+  """
   file = openfile(filename, True)
   v = file.readat(20, 0)
   values = list()
@@ -349,6 +574,9 @@ def random_ids_file(filename, n):
     file.close()
     return values
 
-# expose the ping method to advertise users
 def dhtadvertise_ping(ip, port):
+  """
+  <Purpose>
+    Expose the DHT ping method to advertise users
+  """
   dht.ping_node(ip, port)
