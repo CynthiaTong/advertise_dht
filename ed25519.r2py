@@ -690,12 +690,19 @@ def ed25519_open(sigmsg, vk):
 # ed25519_oop.py
 ################################
 
-def create_keypair():
+def create_keypair(private_key, public_key):
   SEEDLEN = int(SECRETKEYBYTES/2)
   assert SEEDLEN == 32
-  seed = random.random_randombytes(SEEDLEN)
-  sk = SigningKey(seed)
-  vk = sk.get_verifying_key()
+  sk = vk = None
+  if private_key:
+    sk = SigningKey(private_key[:32])
+  else:
+    seed = random.random_randombytes(SEEDLEN)
+    sk = SigningKey(seed)
+  if public_key:
+    vk = VerifyingKey(public_key)
+  else:
+    vk = sk.get_verifying_key()
   return sk, vk
 
 class BadPrefixError(Exception):
