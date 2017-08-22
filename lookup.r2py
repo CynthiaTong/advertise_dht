@@ -46,11 +46,7 @@ class DHTLookup:
     self.lookup_time = 0
     self.router = routing_table
 
-  """
-    port number implications:
 
-
-  """
   def dht_lookup(self, target_string_id, port, callback, version, my_port=63101, value=None, opts=None):
     """
     <Purpose>
@@ -403,7 +399,6 @@ class Lookup:
     """
     # create a new lookup node
     lookup_node = Lookup_Node(id, ip, port, replied, token, token_len)
-
     # if node id is the same as our own, return
     if id == self.id:
       return
@@ -429,6 +424,9 @@ class Lookup:
           if token and token_len > 20:
             # our own tokens are SHA-1 Hashes, so it's an overload token
             raise OverloadTokenError("Overload token: %s(%d)" % (token, token_len))
+          else:
+            n.token = token
+            n.token_len = token_len
         return
       # else if the new node is further away from the target
       elif comparison > 0:
